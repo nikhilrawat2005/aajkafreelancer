@@ -34,7 +34,6 @@ def create_app(config_class=Config):
     # Create upload folders if missing
     # ===============================
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs(app.config['TEMP_UPLOAD_FOLDER'], exist_ok=True)
 
     # ===============================
     # Import Models (REGISTER TABLES)
