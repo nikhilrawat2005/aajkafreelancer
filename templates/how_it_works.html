@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}How It Works{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="notebook-card p-5">
+            <h1 class="notebook-heading mb-4">How It Works</h1>
+            <hr class="notebook-divider">
+            <ol class="steps-list">
+                <li class="mb-3">
+                    <strong>Sign up with your college email</strong><br>
+                    Create an account using your college email ID to ensure all users belong to the same campus community.
+                </li>
+                <li class="mb-3">
+                    <strong>List or explore skills</strong><br>
+                    Students can offer their skills as services, while others can browse available workers and find the right person for their needs.
+                </li>
+                <li class="mb-3">
+                    <strong>Chat before hiring</strong><br>
+                    Use the built-in chat to discuss requirements, clarify expectations, and decide if the worker is the right fit.
+                </li>
+                <li class="mb-3">
+                    <strong>Send a hire request</strong><br>
+                    Once satisfied, send a hire request. The worker can accept or reject the request based on availability.
+                </li>
+                <li class="mb-3">
+                    <strong>Track payments and earnings</strong><br>
+                    Workers can monitor completed jobs, payment records, and total earnings through their payment dashboard.
+                </li>
+            </ol>
+            <div class="text-center mt-4">
+                <a href="{{ url_for('main.landing') }}" class="notebook-btn">Back to Home</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

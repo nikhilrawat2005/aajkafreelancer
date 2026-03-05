@@ -904,33 +904,79 @@ body::before {
     flex: none;
 }
 
-/* Hire button states */
-.hire-default {
-    background-color: #28a745 !important; /* bright green */
-    border-color: black !important;
-    color: black !important;
+/* ===== BRAND FONT ===== */
+.brand-title {
+    font-family: 'Patrick Hand', cursive !important;
+    font-size: 2rem;
 }
-.hire-default:hover {
-    background-color: #218838 !important;
+
+/* ===== FOOTER STYLES ===== */
+footer .notebook-card {
+    background: black !important;
+    color: white;
+    border-color: white;
 }
-.hire-pending {
-    background-color: #ffc107 !important; /* yellow */
-    border-color: black !important;
-    color: black !important;
-    cursor: not-allowed;
+footer .footer-link {
+    color: white;
+    text-decoration: underline;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.1rem;
+    margin-right: 1rem;
 }
-.hire-accepted {
-    background-color: #006400 !important; /* dark green */
-    border-color: black !important;
-    color: white !important;
-    cursor: default;
+footer .footer-link:hover {
+    color: var(--pastel-yellow);
 }
-.hire-rejected {
-    background-color: #dc3545 !important; /* red */
-    border-color: black !important;
-    color: white !important;
-    cursor: default;
+.icon-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
 }
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    background: white;
+    border: 3px solid black;
+    border-radius: 25px 8px 25px 8px; /* notebook rough round */
+    color: black;
+    font-size: 1.5rem;
+    transition: all 0.3s ease;
+    box-shadow: 4px 4px 0 rgba(0,0,0,0.1);
+    transform: rotate(-0.5deg);
+    text-decoration: none;
+}
+.icon-btn:hover {
+    background: var(--pastel-yellow);
+    transform: translate(-2px, -2px) rotate(0.5deg);
+    box-shadow: 6px 6px 0 rgba(0,0,0,0.2);
+    color: black;
+}
+.brand-footer {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+.tagline {
+    font-family: 'Inter', sans-serif;
+    font-size: 1.2rem;
+    opacity: 0.9;
+}
+
+/* ===== STEPS LIST FOR HOW IT WORKS ===== */
+.steps-list li {
+    font-family: 'Inter', sans-serif;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    border-left: 3px solid black;
+    padding-left: 1rem;
+}
+.steps-list li strong {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 1.2rem;
+}
+
 /* Hire button states */
 .hire-default {
     background-color: #28a745 !important; /* bright green */

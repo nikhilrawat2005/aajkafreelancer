@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}About Us{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="notebook-card p-5">
+            <h1 class="notebook-heading mb-4">About AajKaFreelancer</h1>
+            <p class="notebook-lead"><strong>Created by:</strong> Nikhil Rawat & Nikhil Gupta (Team Cipher)</p>
+            <hr class="notebook-divider">
+            <p class="mb-3">
+                AajKaFreelancer is a student-focused freelance platform that connects college peers who want to exchange skills and services. The platform allows students to offer their skills and get paid by fellow students who need those services.
+            </p>
+            <p class="mb-3">
+                Unlike traditional freelance platforms, AajKaFreelancer is built specifically for college communities. Users sign up using their college email IDs, ensuring that everyone on the platform belongs to the same academic environment. This helps maintain authenticity and trust among users.
+            </p>
+            <p class="mb-3">
+                The platform also includes a built-in chat system so clients and workers can discuss requirements before making a hiring decision. Once both sides agree, the client can send a hire request that the worker can accept or decline based on availability.
+            </p>
+            <p class="mb-3">
+                To support freelancers, AajKaFreelancer provides a simple payment dashboard where workers can track completed jobs, payment records, and their overall earnings. Our goal is to help students turn their skills into real opportunities while supporting their peers within the same college community.
+            </p>
+            <div class="text-center mt-4">
+                <a href="{{ url_for('main.landing') }}" class="notebook-btn">Back to Home</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
