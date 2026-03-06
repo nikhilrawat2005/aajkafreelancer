@@ -19,12 +19,6 @@ style="flex:1;overflow-y:auto;padding:10px;">
 
 <div class="mb-2 d-flex {% if msg.sender_id == current_user.id %}justify-content-end{% else %}justify-content-start{% endif %}">
 
-{% if msg.sender_id != current_user.id %}
-<img src="{{ url_for('static', filename='uploads/profile_images/' + (other_user.profile_image or 'default_profile.png')) }}"
-class="rounded-circle me-2 align-self-end"
-style="width:30px;height:30px;object-fit:cover;">
-{% endif %}
-
 <div class="d-inline-block p-2 rounded"
 style="max-width:70%;
 {% if msg.sender_id == current_user.id %}
@@ -42,12 +36,6 @@ border-radius:20px 5px 20px 5px;">
 </small>
 
 </div>
-
-{% if msg.sender_id == current_user.id %}
-<img src="{{ url_for('static', filename='uploads/profile_images/' + (current_user.profile_image or 'default_profile.png')) }}"
-class="rounded-circle ms-2 align-self-end"
-style="width:30px;height:30px;object-fit:cover;">
-{% endif %}
 
 </div>
 
@@ -95,7 +83,7 @@ const messageInput = document.getElementById("message-input");
 const sendBtn = document.getElementById("send-message-btn");
 
 let lastMessageId = {{ messages[-1].id if messages else 0 }};
-let isSubmitting = false;
+let sending = false;
 
 function scrollToBottom(){
 messageContainer.scrollTop = messageContainer.scrollHeight;
@@ -103,27 +91,14 @@ messageContainer.scrollTop = messageContainer.scrollHeight;
 
 scrollToBottom();
 
-async function fetchNewMessages(){
+function addMessage(msg){
 
-try{
+const wrapper = document.createElement("div");
 
-const res = await fetch(`/chat/${conversationId}/messages?since=${lastMessageId}`);
-if(!res.ok) return;
+wrapper.className = "mb-2 d-flex " +
+(msg.sender_id == currentUserId ? "justify-content-end" : "justify-content-start");
 
-const data = await res.json();
-
-data.forEach(msg=>{
-
-if(msg.id <= lastMessageId) return;
-
-const wrapper=document.createElement("div");
-
-wrapper.className="mb-2 d-flex "+
-(msg.sender_id==currentUserId
-?"justify-content-end"
-:"justify-content-start");
-
-wrapper.innerHTML=`
+wrapper.innerHTML = `
 <div class="d-inline-block p-2 rounded"
 style="max-width:70%;
 background-color:${msg.sender_id==currentUserId?'var(--pastel-sky)':'var(--pastel-mint)'};
@@ -141,39 +116,59 @@ ${msg.timestamp}
 
 messageContainer.appendChild(wrapper);
 
-lastMessageId=msg.id;
-
-});
-
-if(data.length>0){
 scrollToBottom();
 }
 
-}catch(err){
-console.error(err);
-}
-
-}
-
-setInterval(fetchNewMessages,1000);
-
-messageForm.addEventListener("submit",async function(e){
-
-e.preventDefault();
-
-const text=messageInput.value.trim();
-
-if(!text||isSubmitting)return;
-
-isSubmitting=true;
-sendBtn.disabled=true;
+async function fetchMessages(){
 
 try{
 
-const formData=new FormData();
+const res = await fetch(`/chat/${conversationId}/messages?since=${lastMessageId}`);
+
+if(!res.ok) return;
+
+const data = await res.json();
+
+data.forEach(msg=>{
+
+if(msg.id <= lastMessageId) return;
+
+addMessage(msg);
+
+lastMessageId = msg.id;
+
+});
+
+}catch(e){
+
+console.log(e);
+
+}
+
+}
+
+setInterval(fetchMessages,800);
+
+messageForm.addEventListener("submit",async(e)=>{
+
+e.preventDefault();
+
+if(sending) return;
+
+const text = messageInput.value.trim();
+
+if(!text) return;
+
+sending = true;
+
+sendBtn.disabled = true;
+
+try{
+
+const formData = new FormData();
 formData.append("message",text);
 
-const res=await fetch(`/chat/send/${conversationId}`,{
+const res = await fetch(`/chat/send/${conversationId}`,{
 method:"POST",
 headers:{
 "X-CSRFToken":window.CSRF_TOKEN
@@ -181,18 +176,22 @@ headers:{
 body:formData
 });
 
-const data=await res.json();
+const data = await res.json();
 
-lastMessageId=data.id;
+addMessage(data);
 
-messageInput.value="";
+lastMessageId = data.id;
 
-}catch(err){
-console.error(err);
+messageInput.value = "";
+
+}catch(e){
+
+console.log(e);
+
 }
 
-isSubmitting=false;
-sendBtn.disabled=false;
+sending = false;
+sendBtn.disabled = false;
 
 });
 
