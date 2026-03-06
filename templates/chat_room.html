@@ -7,64 +7,33 @@ Chat with {{ other_user.full_name }}
 {% block content %}
 
 <div class="row mt-4">
-    <div class="col-12">
-
-        <h1 class="notebook-heading mb-4">
-
-            Chat with 
-            <a href="{{ url_for('main.profile', username=other_user.username) }}" class="notebook-link">
-                {{ other_user.full_name }}
-            </a>
-
-            <button id="record-work-btn"
-                    class="notebook-btn float-end"
-                    style="display:none;">
-                Record
-            </button>
-
-        </h1>
-
-    </div>
-</div>
-
-
-<div class="row">
-
 <div class="col-md-8 mx-auto">
 
 <div class="notebook-card p-3"
-     style="height:60vh; display:flex; flex-direction:column;">
-
-
-<!-- ========================= -->
-<!-- MESSAGE CONTAINER -->
-<!-- ========================= -->
+style="height:60vh;display:flex;flex-direction:column;">
 
 <div id="message-container"
-     style="flex:1; overflow-y:auto; padding:10px;">
+style="flex:1;overflow-y:auto;padding:10px;">
 
 {% for msg in messages %}
 
 <div class="mb-2 d-flex {% if msg.sender_id == current_user.id %}justify-content-end{% else %}justify-content-start{% endif %}">
 
 {% if msg.sender_id != current_user.id %}
-
 <img src="{{ url_for('static', filename='uploads/profile_images/' + (other_user.profile_image or 'default_profile.png')) }}"
-     class="rounded-circle me-2 align-self-end"
-     style="width:30px;height:30px;object-fit:cover;">
-
+class="rounded-circle me-2 align-self-end"
+style="width:30px;height:30px;object-fit:cover;">
 {% endif %}
 
-
 <div class="d-inline-block p-2 rounded"
-     style="max-width:70%;
-     {% if msg.sender_id == current_user.id %}
-     background-color:var(--pastel-sky);
-     {% else %}
-     background-color:var(--pastel-mint);
-     {% endif %}
-     border:2px solid black;
-     border-radius:20px 5px 20px 5px;">
+style="max-width:70%;
+{% if msg.sender_id == current_user.id %}
+background-color:var(--pastel-sky);
+{% else %}
+background-color:var(--pastel-mint);
+{% endif %}
+border:2px solid black;
+border-radius:20px 5px 20px 5px;">
 
 {{ msg.message_text }}
 
@@ -74,13 +43,10 @@ Chat with {{ other_user.full_name }}
 
 </div>
 
-
 {% if msg.sender_id == current_user.id %}
-
 <img src="{{ url_for('static', filename='uploads/profile_images/' + (current_user.profile_image or 'default_profile.png')) }}"
-     class="rounded-circle ms-2 align-self-end"
-     style="width:30px;height:30px;object-fit:cover;">
-
+class="rounded-circle ms-2 align-self-end"
+style="width:30px;height:30px;object-fit:cover;">
 {% endif %}
 
 </div>
@@ -89,46 +55,19 @@ Chat with {{ other_user.full_name }}
 
 </div>
 
+<form id="message-form" class="input-group mt-3">
 
-<!-- ========================= -->
-<!-- HIRE BUTTON -->
-<!-- ========================= -->
+<input
+type="text"
+id="message-input"
+class="notebook-input form-control"
+placeholder="Type a message..."
+autocomplete="off">
 
-{% if other_user.is_worker %}
-
-<div class="mb-2 text-center">
-
-<button id="hire-btn"
-        class="notebook-btn hire-default"
-        data-conversation-id="{{ conversation.id }}">
-
-Hire Worker
-
-</button>
-
-</div>
-
-{% endif %}
-
-
-
-<!-- ========================= -->
-<!-- MESSAGE INPUT -->
-<!-- ========================= -->
-
-<div class="mt-3">
-
-<form id="message-form" class="input-group">
-
-<input type="text"
-       id="message-input"
-       class="notebook-input form-control"
-       placeholder="Type a message..."
-       autocomplete="off">
-
-<button type="submit"
-        class="notebook-btn"
-        id="send-message-btn">
+<button
+type="submit"
+class="notebook-btn"
+id="send-message-btn">
 
 Send
 
@@ -137,27 +76,19 @@ Send
 </form>
 
 </div>
-
 </div>
-
 </div>
-
-</div>
-
 
 {% endblock %}
-
-
 
 {% block scripts %}
 {{ super() }}
 
-<script src="{{ url_for('static', filename='js/hire.js') }}"></script>
-
-
 <script>
 
 const conversationId = {{ conversation.id }};
+const currentUserId = {{ current_user.id }};
+
 const messageContainer = document.getElementById("message-container");
 const messageForm = document.getElementById("message-form");
 const messageInput = document.getElementById("message-input");
@@ -166,120 +97,102 @@ const sendBtn = document.getElementById("send-message-btn");
 let lastMessageId = {{ messages[-1].id if messages else 0 }};
 let isSubmitting = false;
 
-
-
 function scrollToBottom(){
-    messageContainer.scrollTop = messageContainer.scrollHeight;
+messageContainer.scrollTop = messageContainer.scrollHeight;
 }
 
 scrollToBottom();
 
-
-
 async function fetchNewMessages(){
-
-    try{
-
-        const res = await fetch(`/chat/${conversationId}/messages?since=${lastMessageId}`);
-
-        if(!res.ok) return;
-
-        const data = await res.json();
-
-        data.forEach(msg => {
-
-            const wrapper = document.createElement("div");
-
-            wrapper.className = "mb-2 d-flex " +
-                (msg.sender_id == {{ current_user.id }}
-                ? "justify-content-end"
-                : "justify-content-start");
-
-            wrapper.innerHTML = `
-                <div class="d-inline-block p-2 rounded"
-                style="max-width:70%;
-                background-color:var(--pastel-mint);
-                border:2px solid black;
-                border-radius:20px 5px 20px 5px;">
-
-                ${msg.message_text}
-
-                <small class="text-muted d-block">
-                ${msg.timestamp}
-                </small>
-
-                </div>
-            `;
-
-            messageContainer.appendChild(wrapper);
-
-            lastMessageId = msg.id;
-
-        });
-
-        if(data.length > 0){
-            scrollToBottom();
-        }
-
-    }catch(err){
-
-        console.error("Chat polling error", err);
-
-    }
-
-}
-
-
-
-setInterval(fetchNewMessages, 1200);
-
-
-
-messageForm.addEventListener("submit", async (e)=>{
-
-e.preventDefault();
-
-const message = messageInput.value.trim();
-
-if(!message || isSubmitting) return;
-
-isSubmitting = true;
-sendBtn.disabled = true;
-
-const formData = new FormData();
-formData.append("message", message);
-
 
 try{
 
-const res = await fetch(`/chat/send/${conversationId}`,{
-method:"POST",
-headers:{ "X-CSRFToken": window.CSRF_TOKEN },
-body: formData
-});
-
-if(res.ok){
+const res = await fetch(`/chat/${conversationId}/messages?since=${lastMessageId}`);
+if(!res.ok) return;
 
 const data = await res.json();
 
-lastMessageId = data.id;
+data.forEach(msg=>{
 
-messageInput.value = "";
+if(msg.id <= lastMessageId) return;
 
-fetchNewMessages();
+const wrapper=document.createElement("div");
 
+wrapper.className="mb-2 d-flex "+
+(msg.sender_id==currentUserId
+?"justify-content-end"
+:"justify-content-start");
+
+wrapper.innerHTML=`
+<div class="d-inline-block p-2 rounded"
+style="max-width:70%;
+background-color:${msg.sender_id==currentUserId?'var(--pastel-sky)':'var(--pastel-mint)'};
+border:2px solid black;
+border-radius:20px 5px 20px 5px;">
+
+${msg.message_text}
+
+<small class="text-muted d-block">
+${msg.timestamp}
+</small>
+
+</div>
+`;
+
+messageContainer.appendChild(wrapper);
+
+lastMessageId=msg.id;
+
+});
+
+if(data.length>0){
+scrollToBottom();
 }
 
 }catch(err){
+console.error(err);
+}
 
-console.error("Send message error", err);
+}
 
-}finally{
+setInterval(fetchNewMessages,1000);
+
+messageForm.addEventListener("submit",async function(e){
+
+e.preventDefault();
+
+const text=messageInput.value.trim();
+
+if(!text||isSubmitting)return;
+
+isSubmitting=true;
+sendBtn.disabled=true;
+
+try{
+
+const formData=new FormData();
+formData.append("message",text);
+
+const res=await fetch(`/chat/send/${conversationId}`,{
+method:"POST",
+headers:{
+"X-CSRFToken":window.CSRF_TOKEN
+},
+body:formData
+});
+
+const data=await res.json();
+
+lastMessageId=data.id;
+
+messageInput.value="";
+
+}catch(err){
+console.error(err);
+}
 
 isSubmitting=false;
 sendBtn.disabled=false;
-
-}
 
 });
 

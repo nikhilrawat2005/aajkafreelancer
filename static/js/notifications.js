@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (n.type === 'message') {
                                 text = 'New message';
                                 if (n.reference_id) {
-                                    // In a full implementation, you could link to conversation
                                     text = '<a href="/chat/">New message</a>';
                                 }
                             } else {
@@ -49,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     updateNotifications();
-    setInterval(updateNotifications, 10000); // every 10 seconds
+    setInterval(updateNotifications, 30000); // Poll every 30 seconds
 
     if (markAllBtn) {
         markAllBtn.addEventListener('click', function() {
@@ -57,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': window.CSRF_TOKEN   // FIXED: added CSRF token
+                    'X-CSRFToken': window.CSRF_TOKEN
                 },
                 body: JSON.stringify({all: true})
             })

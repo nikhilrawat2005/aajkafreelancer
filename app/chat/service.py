@@ -2,6 +2,8 @@ from app.extensions import db
 from app.chat.models import Conversation, ConversationParticipant, Message
 from app.models import User
 from app.notifications.service import NotificationService
+from sqlalchemy import select
+
 
 
 class ChatService:
@@ -26,7 +28,7 @@ class ChatService:
                 Conversation.id == ConversationParticipant.conversation_id
             )
             .filter(
-                ConversationParticipant.conversation_id.in_(subq)
+                ConversationParticipant.conversation_id.in_(select(subq))
             )
             .first()
         )

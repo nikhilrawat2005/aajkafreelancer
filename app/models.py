@@ -26,6 +26,9 @@ class User(UserMixin, db.Model):
     profile_crop_y = db.Column(db.Float, nullable=True)
     profile_crop_scale = db.Column(db.Float, nullable=True)
 
+    # Admin flag for data export
+    is_admin = db.Column(db.Boolean, default=False)
+
     # Relationships for hire requests
     sent_hire_requests = db.relationship('HireRequest', foreign_keys='HireRequest.sender_id', backref='sender', lazy='dynamic')
     received_hire_requests = db.relationship('HireRequest', foreign_keys='HireRequest.worker_id', backref='worker', lazy='dynamic')
@@ -69,7 +72,8 @@ class PendingUser(db.Model):
             short_bio=self.short_bio,
             is_worker=self.is_worker,
             assigned_id=self.assigned_id,
-            is_verified=True
+            is_verified=True,
+            is_admin=False
         )
 
 

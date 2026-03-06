@@ -79,27 +79,35 @@ def dashboard_tutorials():
 
 
 # =====================================================
-# PEOPLE DIRECTORY
+# PEOPLE DIRECTORY (with pagination)
 # =====================================================
 @main_bp.route('/people')
 @login_required
 def people():
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
     query = request.args.get('q', '')
+
     users_query = User.query.filter(User.is_verified == True)
     if query:
         users_query = users_query.filter(
             User.full_name.ilike(f"%{query}%") |
             User.college_name.ilike(f"%{query}%")
         )
-    users = users_query.all()
+
+    pagination = users_query.order_by(User.full_name).paginate(page=page, per_page=per_page, error_out=False)
+    users = pagination.items
+
     total_users = UserService.get_user_count()
     total_workers = UserService.get_worker_count()
+
     return render_template(
         'people.html',
         users=users,
         total_users=total_users,
         total_workers=total_workers,
-        query=query
+        query=query,
+        pagination=pagination
     )
 
 
@@ -190,17 +198,23 @@ def skill_workers(skill_name):
     description = SkillService.get_description(actual_skill)
     counts = SkillService.get_skill_counts()
     worker_count = counts.get(actual_skill, 0)
-    users = User.query.filter(
+    # Pagination for skill workers
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    users_query = User.query.filter(
         User.is_verified == True,
         User.is_worker == True,
         User.skills.ilike(f'%{actual_skill}%')
-    ).all()
+    )
+    pagination = users_query.order_by(User.full_name).paginate(page=page, per_page=per_page, error_out=False)
+    users = pagination.items
     return render_template(
         'service_detail.html',
         skill=actual_skill,
         description=description,
         worker_count=worker_count,
-        users=users
+        users=users,
+        pagination=pagination
     )
 
 

@@ -1,14 +1,26 @@
 from flask import Flask, render_template, flash, redirect, request, jsonify, url_for
 from config import Config
-from app.extensions import db, mail, login_manager, limiter, migrate, csrf
+from app.extensions import db, mail, login_manager, limiter, migrate, csrf, socketio
 from app.services.skill_service import SkillService
 from werkzeug.exceptions import RequestEntityTooLarge
 from flask_wtf.csrf import CSRFError
 import os
+import logging
 from app.models import HireRequest
+from sqlalchemy import inspect, text
+
+# Try to import admin blueprint; if not available, continue without it
+try:
+    from app.admin import admin_bp
+    HAS_ADMIN = True
+except ImportError:
+    admin_bp = None
+    HAS_ADMIN = False
+    logging.warning("Admin blueprint not available – export feature disabled.")
 
 
 def create_app(config_class=Config):
+
     app = Flask(
         __name__,
         template_folder='../templates',
@@ -28,22 +40,26 @@ def create_app(config_class=Config):
     migrate.init_app(app, db)
     csrf.init_app(app)
 
+    # ✅ FIX
+    socketio.init_app(app)
+
     login_manager.login_view = 'auth.login'
 
     # ===============================
-    # Create upload folders if missing
+    # Create upload folders
     # ===============================
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(app.config['TEMP_UPLOAD_FOLDER'], exist_ok=True)
 
     # ===============================
-    # Import Models (REGISTER TABLES)
+    # Import Models
     # ===============================
     from app import models
     from app.chat import models as chat_models
     from app.notifications import models as notif_models
 
     # ===============================
-    # SAFE USER LOADER (DB RESET SAFE)
+    # USER LOADER
     # ===============================
     @login_manager.user_loader
     def load_user(user_id):
@@ -65,6 +81,9 @@ def create_app(config_class=Config):
     app.register_blueprint(chat_bp)
     app.register_blueprint(notifications_bp)
 
+    if HAS_ADMIN and admin_bp:
+        app.register_blueprint(admin_bp)
+
     # ===============================
     # Context Processors
     # ===============================
@@ -77,7 +96,6 @@ def create_app(config_class=Config):
             return {'unread_messages_count': count}
         return {'unread_messages_count': 0}
 
-    # NEW: inject pending hire requests count for workers
     @app.context_processor
     def inject_pending_requests_count():
         from flask_login import current_user
@@ -107,23 +125,30 @@ def create_app(config_class=Config):
 
     @app.errorhandler(RequestEntityTooLarge)
     def handle_large_file(e):
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({'error': 'File too large. Maximum size is 10MB.'}), 413
         flash("Profile image must be under 10MB.", "danger")
         return redirect(request.url)
 
-    # NEW: CSRF error handler for AJAX requests
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({'error': 'CSRF token missing or invalid'}), 403
         flash('CSRF token missing or invalid', 'danger')
         return redirect(request.url or url_for('main.landing'))
 
     # ===============================
-    # ✅ AUTO CREATE DATABASE TABLES (development only)
+    # DATABASE INIT
     # ===============================
     with app.app_context():
         db.create_all()
+
+        try:
+            inspector = inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('user')]
+
+            if 'is_admin' not in columns:
+                db.session.execute(text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT FALSE'))
+                db.session.commit()
+
+        except Exception as e:
+            app.logger.warning(f"Could not add is_admin column: {e}")
+            db.session.rollback()
 
     return app

@@ -1004,3 +1004,19 @@ footer .footer-link:hover {
     color: white !important;
     cursor: default;
 }
+
+/* ===== SKILL POPOUT – ensure above footer ===== */
+.skill-popout {
+    z-index: 1050 !important;
+}
+
+/* ===== SKILL POPOUT – ensure above footer ===== */
+.skill-popout{
+position:absolute;
+z-index:9999;
+background:white;
+border:2px solid black;
+padding:10px;
+border-radius:10px;
+box-shadow:6px 6px 0 rgba(0,0,0,0.2);
+}

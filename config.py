@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy.pool import NullPool
 
 load_dotenv()
 
@@ -15,7 +14,6 @@ class Config:
 
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
 
-
     # =====================================================
     # DATABASE
     # =====================================================
@@ -29,31 +27,27 @@ class Config:
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # Important for serverless (Vercel + Supabase)
+    # Optimized pool settings for serverless (Vercel + Supabase)
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "poolclass": NullPool
+        "pool_pre_ping": True,           # verify connection before using
+        "pool_recycle": 280,              # recycle connections after 280 sec
+        "pool_size": 5,                   # max connections per instance
+        "max_overflow": 2                  # extra overflow connections
     }
-
 
     # =====================================================
     # MAIL CONFIG
     # =====================================================
 
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
-
     MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
-
     MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-
     MAIL_DEFAULT_SENDER = os.getenv(
         "MAIL_DEFAULT_SENDER",
         MAIL_USERNAME
     )
-
 
     # =====================================================
     # RATE LIMITER
@@ -63,7 +57,6 @@ class Config:
         "RATELIMIT_STORAGE_URI",
         "memory://"
     )
-
 
     # =====================================================
     # FILE UPLOAD SETTINGS
@@ -75,12 +68,10 @@ class Config:
         "uploads",
         "profile_images"
     )
-
     TEMP_UPLOAD_FOLDER = os.path.join(
         BASE_DIR,
         "static",
         "uploads",
         "temp"
     )
-
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB

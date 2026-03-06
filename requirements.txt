@@ -11,8 +11,14 @@ email-validator==2.0.0
 
 python-dotenv==1.0.0
 werkzeug==2.3.7
-
+openpyxl==3.1.5
 Pillow==10.0.0
-
+pandas==3.0.1
 psycopg2-binary==2.9.9
 gunicorn==21.2.0
+
+# -------- NEW (for realtime chat) --------
+Flask-SocketIO==5.3.6
+python-socketio==5.11.2
+python-engineio==4.9.0
+eventlet==0.36.1
