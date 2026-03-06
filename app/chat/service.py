@@ -8,7 +8,6 @@ class ChatService:
 
     @staticmethod
     def get_or_create_conversation(user1_id, user2_id):
-        """Find existing conversation between two users or create new one."""
 
         subq = db.session.query(
             ConversationParticipant.conversation_id
@@ -54,9 +53,9 @@ class ChatService:
 
         return conv
 
+
     @staticmethod
     def send_message(conversation_id, sender_id, message_text):
-        """Send message and create notification."""
 
         msg = Message(
             conversation_id=conversation_id,
@@ -72,6 +71,7 @@ class ChatService:
 
         if conv:
             other_user_id = None
+
             for p in conv.participants:
                 if p.user_id != sender_id:
                     other_user_id = p.user_id
@@ -86,18 +86,22 @@ class ChatService:
 
         return msg
 
+
     @staticmethod
     def get_conversation_messages(conversation_id, user_id=None):
-        """Get all messages and mark unread as read."""
 
         messages = (
             Message.query
             .filter_by(conversation_id=conversation_id)
-            .order_by(Message.timestamp)
+            .order_by(Message.timestamp.desc())
+            .limit(50)
             .all()
         )
 
+        messages = list(reversed(messages))
+
         if user_id:
+
             Message.query.filter(
                 Message.conversation_id == conversation_id,
                 Message.sender_id != user_id,
@@ -106,13 +110,14 @@ class ChatService:
                 {'is_read': True},
                 synchronize_session=False
             )
+
             db.session.commit()
 
         return messages
 
+
     @staticmethod
     def get_messages_since(conversation_id, since_id, user_id=None):
-        """Fetch messages after a specific message ID."""
 
         messages = (
             Message.query
@@ -125,6 +130,7 @@ class ChatService:
         )
 
         if user_id and messages:
+
             Message.query.filter(
                 Message.conversation_id == conversation_id,
                 Message.id > since_id,
@@ -134,16 +140,14 @@ class ChatService:
                 {'is_read': True},
                 synchronize_session=False
             )
+
             db.session.commit()
 
         return messages
 
+
     @staticmethod
     def get_user_conversations(user_id):
-        """
-        Optimized conversation loader.
-        Prevents N+1 query explosion.
-        """
 
         from sqlalchemy.orm import joinedload
         from sqlalchemy import func
@@ -163,6 +167,7 @@ class ChatService:
         result = []
 
         for conv in convs:
+
             other = next(
                 (p.user for p in conv.participants if p.user_id != user_id),
                 None
@@ -171,7 +176,6 @@ class ChatService:
             if not other:
                 continue
 
-            # Last message
             last_msg = (
                 db.session.query(Message)
                 .filter(Message.conversation_id == conv.id)
@@ -180,7 +184,6 @@ class ChatService:
                 .first()
             )
 
-            # Unread count
             unread_count = (
                 db.session.query(func.count(Message.id))
                 .filter(
@@ -192,35 +195,30 @@ class ChatService:
             )
 
             result.append({
-                'conversation': conv,
-                'other_user': other,
-                'last_message': last_msg,
-                'unread_count': unread_count
+                "conversation": conv,
+                "other_user": other,
+                "last_message": last_msg,
+                "unread_count": unread_count
             })
 
         return result
 
+
     @staticmethod
     def get_unread_count(user_id):
-        """Total unread messages across all conversations."""
 
         from sqlalchemy import func
 
-        return (
+        count = (
             db.session.query(func.count(Message.id))
-            .join(
-                Conversation,
-                Conversation.id == Message.conversation_id
-            )
-            .join(
-                ConversationParticipant,
-                ConversationParticipant.conversation_id == Conversation.id
-            )
+            .join(Conversation)
+            .join(ConversationParticipant)
             .filter(
                 ConversationParticipant.user_id == user_id,
                 Message.sender_id != user_id,
                 Message.is_read == False
             )
             .scalar()
-            or 0
         )
+
+        return count or 0
