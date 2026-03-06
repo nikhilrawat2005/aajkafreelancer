@@ -31,9 +31,9 @@ def create_app(config_class=Config):
 
     app.config.from_object(config_class)
 
-    # -------------------------
-    # Extensions
-    # -------------------------
+    # -----------------------------
+    # Initialize Extensions
+    # -----------------------------
 
     db.init_app(app)
     mail.init_app(app)
@@ -49,10 +49,9 @@ def create_app(config_class=Config):
 
     login_manager.login_view = 'auth.login'
 
-    # -------------------------
-    # SAFE Upload Folder Creation
-    # (Skip on Vercel)
-    # -------------------------
+    # -----------------------------
+    # Upload folders (LOCAL ONLY)
+    # -----------------------------
 
     try:
         if not os.environ.get("VERCEL"):
@@ -61,17 +60,17 @@ def create_app(config_class=Config):
     except Exception as e:
         app.logger.warning(f"Upload folder creation skipped: {e}")
 
-    # -------------------------
+    # -----------------------------
     # Import Models
-    # -------------------------
+    # -----------------------------
 
     from app import models
     from app.chat import models as chat_models
     from app.notifications import models as notif_models
 
-    # -------------------------
+    # -----------------------------
     # User Loader
-    # -------------------------
+    # -----------------------------
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -80,9 +79,9 @@ def create_app(config_class=Config):
         except Exception:
             return None
 
-    # -------------------------
-    # Blueprints
-    # -------------------------
+    # -----------------------------
+    # Register Blueprints
+    # -----------------------------
 
     from app.auth.routes import auth_bp
     from app.main.routes import main_bp
@@ -97,9 +96,9 @@ def create_app(config_class=Config):
     if HAS_ADMIN and admin_bp:
         app.register_blueprint(admin_bp)
 
-    # -------------------------
+    # -----------------------------
     # Context Processors
-    # -------------------------
+    # -----------------------------
 
     @app.context_processor
     def inject_unread_messages():
@@ -124,18 +123,18 @@ def create_app(config_class=Config):
                 return dict(pending_requests_count=0)
         return dict(pending_requests_count=0)
 
-    # -------------------------
+    # -----------------------------
     # Jinja Filters
-    # -------------------------
+    # -----------------------------
 
     def skill_description_filter(skill):
         return SkillService.get_description(skill)
 
     app.jinja_env.filters['skill_description'] = skill_description_filter
 
-    # -------------------------
+    # -----------------------------
     # Error Handlers
-    # -------------------------
+    # -----------------------------
 
     @app.errorhandler(404)
     def not_found_error(e):
@@ -155,9 +154,9 @@ def create_app(config_class=Config):
         flash("Security token expired. Please try again.", "danger")
         return redirect(request.referrer or url_for('main.landing'))
 
-    # -------------------------
+    # -----------------------------
     # Database Init
-    # -------------------------
+    # -----------------------------
 
     with app.app_context():
 
@@ -169,7 +168,7 @@ def create_app(config_class=Config):
 
             if 'is_admin' not in columns:
                 db.session.execute(
-                    text("ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0")
+                    text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE')
                 )
                 db.session.commit()
 
