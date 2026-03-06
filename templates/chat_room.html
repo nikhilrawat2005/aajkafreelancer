@@ -12,12 +12,23 @@ Chat with {{ other_user.full_name }}
 <div class="notebook-card p-3"
 style="height:60vh;display:flex;flex-direction:column;">
 
+<!-- HIRE BUTTON -->
+
+<div class="mb-2 text-end">
+<button id="hire-btn"
+class="notebook-btn hire-default"
+data-conversation-id="{{ conversation.id }}">
+Hire Worker
+</button>
+</div>
+
 <div id="message-container"
 style="flex:1;overflow-y:auto;padding:10px;">
 
 {% for msg in messages %}
 
-<div class="mb-2 d-flex {% if msg.sender_id == current_user.id %}justify-content-end{% else %}justify-content-start{% endif %}">
+<div class="mb-2 d-flex {% if msg.sender_id == current_user.id %}justify-content-end{% else %}justify-content-start{% endif %}"
+id="msg-{{ msg.id }}">
 
 <div class="d-inline-block p-2 rounded"
 style="max-width:70%;
@@ -72,6 +83,8 @@ Send
 {% block scripts %}
 {{ super() }}
 
+<script src="{{ url_for('static', filename='js/hire.js') }}"></script>
+
 <script>
 
 const conversationId = {{ conversation.id }};
@@ -93,7 +106,11 @@ scrollToBottom();
 
 function addMessage(msg){
 
+if(document.getElementById("msg-"+msg.id)) return;
+
 const wrapper = document.createElement("div");
+
+wrapper.id = "msg-"+msg.id;
 
 wrapper.className = "mb-2 d-flex " +
 (msg.sender_id == currentUserId ? "justify-content-end" : "justify-content-start");
@@ -131,11 +148,9 @@ const data = await res.json();
 
 data.forEach(msg=>{
 
-if(msg.id <= lastMessageId) return;
-
 addMessage(msg);
 
-lastMessageId = msg.id;
+lastMessageId = Math.max(lastMessageId,msg.id);
 
 });
 
@@ -147,7 +162,7 @@ console.log(e);
 
 }
 
-setInterval(fetchMessages,800);
+setInterval(fetchMessages,3000);
 
 messageForm.addEventListener("submit",async(e)=>{
 

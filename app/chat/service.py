@@ -1,13 +1,15 @@
 from app.extensions import db
 from app.chat.models import Conversation, ConversationParticipant, Message
-from app.models import User
 from app.notifications.service import NotificationService
-from sqlalchemy import select
-
+from sqlalchemy import select, func
+from sqlalchemy.orm import joinedload
 
 
 class ChatService:
 
+    # =====================================================
+    # CREATE OR GET CONVERSATION
+    # =====================================================
     @staticmethod
     def get_or_create_conversation(user1_id, user2_id):
 
@@ -56,6 +58,9 @@ class ChatService:
         return conv
 
 
+    # =====================================================
+    # SEND MESSAGE
+    # =====================================================
     @staticmethod
     def send_message(conversation_id, sender_id, message_text):
 
@@ -82,13 +87,16 @@ class ChatService:
             if other_user_id:
                 NotificationService.create_notification(
                     user_id=other_user_id,
-                    type='message',
-                    reference_id=msg.id
+                    type="message",
+                    reference_id=conversation_id
                 )
 
         return msg
 
 
+    # =====================================================
+    # GET CONVERSATION MESSAGES
+    # =====================================================
     @staticmethod
     def get_conversation_messages(conversation_id, user_id=None):
 
@@ -103,13 +111,12 @@ class ChatService:
         messages = list(reversed(messages))
 
         if user_id:
-
             Message.query.filter(
                 Message.conversation_id == conversation_id,
                 Message.sender_id != user_id,
                 Message.is_read == False
             ).update(
-                {'is_read': True},
+                {"is_read": True},
                 synchronize_session=False
             )
 
@@ -118,6 +125,9 @@ class ChatService:
         return messages
 
 
+    # =====================================================
+    # FETCH NEW MESSAGES
+    # =====================================================
     @staticmethod
     def get_messages_since(conversation_id, since_id, user_id=None):
 
@@ -132,14 +142,13 @@ class ChatService:
         )
 
         if user_id and messages:
-
             Message.query.filter(
                 Message.conversation_id == conversation_id,
                 Message.id > since_id,
                 Message.sender_id != user_id,
                 Message.is_read == False
             ).update(
-                {'is_read': True},
+                {"is_read": True},
                 synchronize_session=False
             )
 
@@ -148,11 +157,11 @@ class ChatService:
         return messages
 
 
+    # =====================================================
+    # USER CONVERSATIONS
+    # =====================================================
     @staticmethod
     def get_user_conversations(user_id):
-
-        from sqlalchemy.orm import joinedload
-        from sqlalchemy import func
 
         convs = (
             Conversation.query
@@ -182,7 +191,6 @@ class ChatService:
                 db.session.query(Message)
                 .filter(Message.conversation_id == conv.id)
                 .order_by(Message.timestamp.desc())
-                .limit(1)
                 .first()
             )
 
@@ -206,10 +214,11 @@ class ChatService:
         return result
 
 
+    # =====================================================
+    # TOTAL UNREAD COUNT
+    # =====================================================
     @staticmethod
     def get_unread_count(user_id):
-
-        from sqlalchemy import func
 
         count = (
             db.session.query(func.count(Message.id))

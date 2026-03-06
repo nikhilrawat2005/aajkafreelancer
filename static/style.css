@@ -1005,18 +1005,38 @@ footer .footer-link:hover {
     cursor: default;
 }
 
-/* ===== SKILL POPOUT – ensure above footer ===== */
-.skill-popout {
-    z-index: 1050 !important;
+/* ===== SKILL POPOUT – Always above footer ===== */
+
+.skill-popout-container {
+    position: relative;
+    z-index: 9999;
 }
 
-/* ===== SKILL POPOUT – ensure above footer ===== */
-.skill-popout{
-position:absolute;
-z-index:9999;
-background:white;
-border:2px solid black;
-padding:10px;
-border-radius:10px;
-box-shadow:6px 6px 0 rgba(0,0,0,0.2);
+.skill-popout {
+    position: absolute;
+    top: 100%;
+    left: 0;
+
+    z-index: 9999;
+
+    background: white;
+    border: 2px solid black;
+    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 6px 6px 0 rgba(0,0,0,0.2);
+
+    opacity: 0;
+    transform: translateY(5px);
+    transition: all 0.2s ease;
+}
+
+.skill-popout.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Footer stays below popout */
+footer {
+    position: relative;
+    z-index: 1;
 }
