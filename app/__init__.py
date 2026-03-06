@@ -40,16 +40,20 @@ def create_app(config_class=Config):
     migrate.init_app(app, db)
     csrf.init_app(app)
 
-    # ✅ FIX
+    # SocketIO init
     socketio.init_app(app)
 
     login_manager.login_view = 'auth.login'
 
     # ===============================
-    # Create upload folders
+    # Create upload folders (LOCAL ONLY)
     # ===============================
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs(app.config['TEMP_UPLOAD_FOLDER'], exist_ok=True)
+    try:
+        if not os.environ.get("VERCEL"):
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            os.makedirs(app.config['TEMP_UPLOAD_FOLDER'], exist_ok=True)
+    except Exception as e:
+        app.logger.warning(f"Upload folder creation skipped: {e}")
 
     # ===============================
     # Import Models
@@ -144,7 +148,9 @@ def create_app(config_class=Config):
             columns = [col['name'] for col in inspector.get_columns('user')]
 
             if 'is_admin' not in columns:
-                db.session.execute(text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT FALSE'))
+                db.session.execute(
+                    text('ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT FALSE')
+                )
                 db.session.commit()
 
         except Exception as e:
