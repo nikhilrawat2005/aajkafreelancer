@@ -7,209 +7,97 @@ Chat with {{ other_user.full_name }}
 {% block content %}
 
 <div class="row mt-4">
-<div class="col-md-8 mx-auto">
+  <div class="col-md-8 mx-auto">
 
-<div class="notebook-card p-3"
-style="height:60vh;display:flex;flex-direction:column;">
+    <div class="notebook-card p-3"
+         style="height:65vh;display:flex;flex-direction:column;">
 
-<!-- HIRE BUTTON -->
+      <!-- TOP BAR -->
+      <div class="d-flex justify-content-between align-items-center mb-2">
 
-<div class="mb-2 text-end">
-<button id="hire-btn"
-class="notebook-btn hire-default"
-data-conversation-id="{{ conversation.id }}">
-Hire Worker
-</button>
+        <h3 class="h5 m-0">
+          Chat with {{ other_user.full_name }}
+        </h3>
+
+        <!-- HIRE BUTTON -->
+        <button id="hire-btn"
+                class="notebook-btn hire-default"
+                data-conversation-id="{{ conversation.id }}">
+          Hire Worker
+        </button>
+
+      </div>
+
+
+      <!-- MESSAGE AREA -->
+      <div id="message-container"
+           style="
+           flex:1;
+           overflow-y:auto;
+           padding:10px;
+           border:2px dashed black;
+           border-radius:15px;
+           background:white;
+           ">
+
+        <!-- Messages rendered by chat.js -->
+
+      </div>
+
+
+      <!-- MESSAGE INPUT -->
+      <form id="message-form" class="input-group mt-3">
+
+        <input
+          type="text"
+          id="message-input"
+          class="notebook-input form-control"
+          placeholder="Type a message..."
+          autocomplete="off"
+          required
+        >
+
+        <button
+          type="submit"
+          class="notebook-btn"
+          id="send-message-btn">
+
+          Send
+
+        </button>
+
+      </form>
+
+    </div>
+
+  </div>
 </div>
 
-<div id="message-container"
-style="flex:1;overflow-y:auto;padding:10px;">
 
-{% for msg in messages %}
+<!-- Pass data to JavaScript -->
+<script>
 
-<div class="mb-2 d-flex {% if msg.sender_id == current_user.id %}justify-content-end{% else %}justify-content-start{% endif %}"
-id="msg-{{ msg.id }}">
+window.CONVERSATION_ID = "{{ conversation.id }}";
 
-<div class="d-inline-block p-2 rounded"
-style="max-width:70%;
-{% if msg.sender_id == current_user.id %}
-background-color:var(--pastel-sky);
-{% else %}
-background-color:var(--pastel-mint);
-{% endif %}
-border:2px solid black;
-border-radius:20px 5px 20px 5px;">
+window.CURRENT_USER_ID = "{{ current_user.id }}";
 
-{{ msg.message_text }}
+window.SUPABASE_URL = "{{ config.SUPABASE_URL }}";
 
-<small class="text-muted d-block">
-{{ msg.timestamp.strftime('%H:%M') }}
-</small>
+window.SUPABASE_ANON_KEY = "{{ config.SUPABASE_ANON_KEY }}";
 
-</div>
-
-</div>
-
-{% endfor %}
-
-</div>
-
-<form id="message-form" class="input-group mt-3">
-
-<input
-type="text"
-id="message-input"
-class="notebook-input form-control"
-placeholder="Type a message..."
-autocomplete="off">
-
-<button
-type="submit"
-class="notebook-btn"
-id="send-message-btn">
-
-Send
-
-</button>
-
-</form>
-
-</div>
-</div>
-</div>
+</script>
 
 {% endblock %}
 
+
 {% block scripts %}
+
 {{ super() }}
 
+<!-- Realtime chat system -->
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+
+<!-- Hire system -->
 <script src="{{ url_for('static', filename='js/hire.js') }}"></script>
-
-<script>
-
-const conversationId = {{ conversation.id }};
-const currentUserId = {{ current_user.id }};
-
-const messageContainer = document.getElementById("message-container");
-const messageForm = document.getElementById("message-form");
-const messageInput = document.getElementById("message-input");
-const sendBtn = document.getElementById("send-message-btn");
-
-let lastMessageId = {{ messages[-1].id if messages else 0 }};
-let sending = false;
-
-function scrollToBottom(){
-messageContainer.scrollTop = messageContainer.scrollHeight;
-}
-
-scrollToBottom();
-
-function addMessage(msg){
-
-if(document.getElementById("msg-"+msg.id)) return;
-
-const wrapper = document.createElement("div");
-
-wrapper.id = "msg-"+msg.id;
-
-wrapper.className = "mb-2 d-flex " +
-(msg.sender_id == currentUserId ? "justify-content-end" : "justify-content-start");
-
-wrapper.innerHTML = `
-<div class="d-inline-block p-2 rounded"
-style="max-width:70%;
-background-color:${msg.sender_id==currentUserId?'var(--pastel-sky)':'var(--pastel-mint)'};
-border:2px solid black;
-border-radius:20px 5px 20px 5px;">
-
-${msg.message_text}
-
-<small class="text-muted d-block">
-${msg.timestamp}
-</small>
-
-</div>
-`;
-
-messageContainer.appendChild(wrapper);
-
-scrollToBottom();
-}
-
-async function fetchMessages(){
-
-try{
-
-const res = await fetch(`/chat/${conversationId}/messages?since=${lastMessageId}`);
-
-if(!res.ok) return;
-
-const data = await res.json();
-
-data.forEach(msg=>{
-
-addMessage(msg);
-
-lastMessageId = Math.max(lastMessageId,msg.id);
-
-});
-
-}catch(e){
-
-console.log(e);
-
-}
-
-}
-
-setInterval(fetchMessages,3000);
-
-messageForm.addEventListener("submit",async(e)=>{
-
-e.preventDefault();
-
-if(sending) return;
-
-const text = messageInput.value.trim();
-
-if(!text) return;
-
-sending = true;
-
-sendBtn.disabled = true;
-
-try{
-
-const formData = new FormData();
-formData.append("message",text);
-
-const res = await fetch(`/chat/send/${conversationId}`,{
-method:"POST",
-headers:{
-"X-CSRFToken":window.CSRF_TOKEN
-},
-body:formData
-});
-
-const data = await res.json();
-
-addMessage(data);
-
-lastMessageId = data.id;
-
-messageInput.value = "";
-
-}catch(e){
-
-console.log(e);
-
-}
-
-sending = false;
-sendBtn.disabled = false;
-
-});
-
-</script>
 
 {% endblock %}

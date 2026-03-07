@@ -241,6 +241,8 @@
     <script src="{{ url_for('static', filename='js/animation.js') }}"></script>
     <!-- Form enhancements JS -->
     <script src="{{ url_for('static', filename='js/forms.js') }}"></script>
+    <!-- Supabase JS client (required for realtime chat) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Global JS -->
     <script>
         window.CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');

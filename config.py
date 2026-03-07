@@ -29,11 +29,25 @@ class Config:
 
     # Optimized pool settings for serverless (Vercel + Supabase)
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_pre_ping": True,           # verify connection before using
-        "pool_recycle": 280,              # recycle connections after 280 sec
-        "pool_size": 5,                   # max connections per instance
-        "max_overflow": 2                  # extra overflow connections
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+        "pool_size": 5,
+        "max_overflow": 2
     }
+
+    # =====================================================
+    # SUPABASE CONFIG (FOR REALTIME CHAT)
+    # =====================================================
+
+    SUPABASE_URL = os.getenv(
+        "SUPABASE_URL",
+        "https://your-project-id.supabase.co"
+    )
+
+    SUPABASE_ANON_KEY = os.getenv(
+        "SUPABASE_ANON_KEY",
+        "your-anon-key"
+    )
 
     # =====================================================
     # MAIL CONFIG
@@ -44,6 +58,7 @@ class Config:
     MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
     MAIL_USERNAME = os.getenv("MAIL_USERNAME")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+
     MAIL_DEFAULT_SENDER = os.getenv(
         "MAIL_DEFAULT_SENDER",
         MAIL_USERNAME
@@ -68,10 +83,12 @@ class Config:
         "uploads",
         "profile_images"
     )
+
     TEMP_UPLOAD_FOLDER = os.path.join(
         BASE_DIR,
         "static",
         "uploads",
         "temp"
     )
+
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB

@@ -1,31 +1,31 @@
-# app/chat/routes.py
+# app/chat/routes.py – Minimal version (only template rendering & conversation creation)
 
-from flask import render_template, redirect, url_for, flash, request, jsonify
+from flask import render_template, redirect, url_for, flash, jsonify, request
 from flask_login import login_required, current_user
 from datetime import datetime
 
 from app.chat import chat_bp
-from app.chat.service import ChatService
 from app.models import User, HireRequest
+from app.chat.models import Conversation, ConversationParticipant
 from app.extensions import db
-from app.notifications.models import Notification
-from app.chat.models import ConversationParticipant
 
 
 # ===============================
-# Existing routes (unchanged)
+# Chat list – no local data needed, frontend loads from Supabase
 # ===============================
-
 @chat_bp.route('/')
 @login_required
 def index():
-    conversations = ChatService.get_user_conversations(current_user.id)
-    return render_template('chat_list.html', conversations=conversations)
+    return render_template('chat_list.html')
 
 
+# ===============================
+# Conversation room – verify participant, pass conversation & other user
+# ===============================
 @chat_bp.route('/<int:conversation_id>')
 @login_required
 def conversation(conversation_id):
+    # Check that current user is a participant
     participant = ConversationParticipant.query.filter_by(
         conversation_id=conversation_id,
         user_id=current_user.id
@@ -34,30 +34,26 @@ def conversation(conversation_id):
         flash('Unauthorized access.', 'danger')
         return redirect(url_for('chat.index'))
 
-    conv_obj = participant.conversation
-    messages = ChatService.get_conversation_messages(conversation_id, current_user.id)
+    conv = participant.conversation
 
-    # Clear message notifications
-    Notification.query.filter(
-        Notification.user_id == current_user.id,
-        Notification.type == 'message',
-        Notification.is_read == False
-    ).update({'is_read': True}, synchronize_session=False)
-    db.session.commit()
+    # Find the other participant (for display name, profile link)
+    other_user = None
+    for p in conv.participants:
+        if p.user_id != current_user.id:
+            other_user = p.user
+            break
 
-    other_user = next(
-        (p.user for p in conv_obj.participants if p.user_id != current_user.id),
-        None
-    )
-
+    # Render the room – messages will be loaded by Supabase in the browser
     return render_template(
         'chat_room.html',
-        conversation=conv_obj,
-        messages=messages,
+        conversation=conv,
         other_user=other_user
     )
 
 
+# ===============================
+# Start a conversation (or get existing one)
+# ===============================
 @chat_bp.route('/start/<int:user_id>')
 @login_required
 def start_conversation(user_id):
@@ -65,50 +61,47 @@ def start_conversation(user_id):
         flash('You cannot message yourself.', 'info')
         return redirect(url_for('main.profile', username=current_user.username))
 
+    # Ensure target user exists
     User.query.get_or_404(user_id)
-    conv = ChatService.get_or_create_conversation(current_user.id, user_id)
+
+    # Look for an existing conversation between these two users
+    subq = db.session.query(
+        ConversationParticipant.conversation_id
+    ).filter(
+        ConversationParticipant.user_id.in_([current_user.id, user_id])
+    ).group_by(
+        ConversationParticipant.conversation_id
+    ).having(db.func.count(ConversationParticipant.user_id) == 2).subquery()
+
+    conv = db.session.query(Conversation).join(
+        ConversationParticipant,
+        Conversation.id == ConversationParticipant.conversation_id
+    ).filter(
+        ConversationParticipant.conversation_id.in_(subq)
+    ).first()
+
+    if not conv:
+        # Create new conversation
+        conv = Conversation()
+        db.session.add(conv)
+        db.session.flush()  # to get conv.id
+
+        participant1 = ConversationParticipant(
+            conversation_id=conv.id,
+            user_id=current_user.id
+        )
+        participant2 = ConversationParticipant(
+            conversation_id=conv.id,
+            user_id=user_id
+        )
+        db.session.add_all([participant1, participant2])
+        db.session.commit()
+
     return redirect(url_for('chat.conversation', conversation_id=conv.id))
 
 
-@chat_bp.route('/send/<int:conversation_id>', methods=['POST'])
-@login_required
-def send_message(conversation_id):
-    message = request.form.get('message', '').strip()
-    if not message:
-        return jsonify({'error': 'Message cannot be empty'}), 400
-
-    msg = ChatService.send_message(conversation_id, current_user.id, message)
-    return jsonify({
-        'id': msg.id,
-        'message_text': msg.message_text,
-        'timestamp': msg.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-        'sender_id': msg.sender_id
-    })
-
-
-@chat_bp.route('/<int:conversation_id>/messages')
-@login_required
-def get_new_messages(conversation_id):
-    since_id = request.args.get('since', 0, type=int)
-    messages = ChatService.get_messages_since(conversation_id, since_id, current_user.id)
-    data = [{
-        'id': m.id,
-        'message_text': m.message_text,
-        'timestamp': m.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-        'sender_id': m.sender_id
-    } for m in messages]
-    return jsonify(data)
-
-
-@chat_bp.route('/unread-count')
-@login_required
-def unread_count():
-    count = ChatService.get_unread_count(current_user.id)
-    return jsonify({'count': count})
-
-
 # ===============================
-# HIRE REQUEST ENDPOINTS (updated)
+# HIRE REQUEST ENDPOINTS (unchanged, kept for functionality)
 # ===============================
 
 @chat_bp.route('/hire/request/<int:conversation_id>', methods=['POST'])
@@ -174,13 +167,11 @@ def hire_status(conversation_id):
     if not participant:
         return jsonify({'error': 'Unauthorized'}), 403
 
-    # Get the most recent active request (pending or accepted)
     hire = HireRequest.query.filter_by(
         conversation_id=conversation_id,
         active=True
     ).order_by(HireRequest.created_at.desc()).first()
 
-    # If no active request, check for any accepted request with record (inactive) for view
     if not hire:
         hire = HireRequest.query.filter_by(
             conversation_id=conversation_id,
@@ -190,11 +181,10 @@ def hire_status(conversation_id):
     if not hire:
         return jsonify({'status': None})
 
-    # Determine if current user is the requester
     is_requester = (hire.sender_id == current_user.id)
 
     return jsonify({
-        'status': hire.status if hire.active else None,  # if inactive, treat as no active request for hire button
+        'status': hire.status if hire.active else None,
         'request_id': hire.id,
         'work_title': hire.work_title,
         'work_description': hire.work_description,
@@ -247,7 +237,6 @@ def reject_hire(request_id):
 def record_hire(request_id):
     """Save work record (title, dates) after acceptance. Only requester can do this."""
     hire = HireRequest.query.get_or_404(request_id)
-    # Only the requester can create the record
     if hire.sender_id != current_user.id:
         return jsonify({'error': 'Unauthorized'}), 403
 
@@ -259,11 +248,11 @@ def record_hire(request_id):
         return jsonify({'error': 'No data provided'}), 400
 
     hire.work_title = data.get('title', '').strip()
-    hire.work_description = data.get('description', '').strip()  # optional notes
+    hire.work_description = data.get('description', '').strip()
     hire.start_date = datetime.strptime(data.get('start_date'), '%Y-%m-%d').date() if data.get('start_date') else None
     hire.end_date = datetime.strptime(data.get('end_date'), '%Y-%m-%d').date() if data.get('end_date') else None
     hire.record_created = True
-    hire.active = False  # Mark as inactive so new requests can be made
+    hire.active = False
     db.session.commit()
 
     return jsonify({'success': True})
