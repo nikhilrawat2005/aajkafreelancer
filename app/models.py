@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask_login import UserMixin
 from app.extensions import db
+import uuid
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -100,7 +101,7 @@ class HireRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     worker_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    conversation_id = db.Column(db.Integer, db.ForeignKey('conversations.id'), nullable=False)
+    conversation_id = db.Column(db.UUID(as_uuid=True), db.ForeignKey('conversations.id'), nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, accepted, rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     responded_at = db.Column(db.DateTime, nullable=True)

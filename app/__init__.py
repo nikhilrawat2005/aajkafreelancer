@@ -11,7 +11,6 @@ from app.services.skill_service import SkillService
 from app.models import HireRequest
 
 
-# Try to import admin blueprint
 try:
     from app.admin import admin_bp
     HAS_ADMIN = True
@@ -32,7 +31,7 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # -----------------------------
-    # Initialize Extensions
+    # Extensions
     # -----------------------------
 
     db.init_app(app)
@@ -155,12 +154,15 @@ def create_app(config_class=Config):
         return redirect(request.referrer or url_for('main.landing'))
 
     # -----------------------------
-    # Database Init
+    # DATABASE INIT (SAFE VERSION)
     # -----------------------------
 
     with app.app_context():
 
-        db.create_all()
+        # IMPORTANT:
+        # Only run create_all in LOCAL DEV
+        if not os.environ.get("VERCEL"):
+            db.create_all()
 
         try:
             inspector = inspect(db.engine)
