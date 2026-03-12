@@ -1,7 +1,6 @@
 from datetime import datetime
 from flask_login import UserMixin
 from app.extensions import db
-import uuid
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -31,8 +30,18 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
 
     # Relationships for hire requests
-    sent_hire_requests = db.relationship('HireRequest', foreign_keys='HireRequest.sender_id', backref='sender', lazy='dynamic')
-    received_hire_requests = db.relationship('HireRequest', foreign_keys='HireRequest.worker_id', backref='worker', lazy='dynamic')
+    sent_hire_requests = db.relationship(
+        'HireRequest',
+        foreign_keys='HireRequest.sender_id',
+        backref='sender',
+        lazy='dynamic'
+    )
+    received_hire_requests = db.relationship(
+        'HireRequest',
+        foreign_keys='HireRequest.worker_id',
+        backref='worker',
+        lazy='dynamic'
+    )
 
     __table_args__ = (
         db.Index('idx_user_username', 'username'),
@@ -101,21 +110,20 @@ class HireRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     worker_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    conversation_id = db.Column(db.UUID(as_uuid=True), db.ForeignKey('conversations.id'), nullable=False)
-    status = db.Column(db.String(20), default='pending')  # pending, accepted, rejected
+    conversation_id = db.Column(db.String(36), nullable=False)  # UUID from Supabase
+    status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     responded_at = db.Column(db.DateTime, nullable=True)
     work_title = db.Column(db.String(200), nullable=True)
     work_description = db.Column(db.Text, nullable=True)
     active = db.Column(db.Boolean, default=True)
-
-    # New fields for improved record workflow
     start_date = db.Column(db.Date, nullable=True)
     end_date = db.Column(db.Date, nullable=True)
     record_created = db.Column(db.Boolean, default=False)
 
-    # Relationships
-    conversation = db.relationship('Conversation', backref='hire_requests')
+    # Relationships (using backref from User)
+    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_hire_requests')
+    worker = db.relationship('User', foreign_keys=[worker_id], backref='received_hire_requests')
 
     __table_args__ = (
         db.Index('idx_hire_sender', 'sender_id'),

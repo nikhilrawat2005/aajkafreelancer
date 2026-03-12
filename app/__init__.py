@@ -6,10 +6,9 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from flask_wtf.csrf import CSRFError
 from sqlalchemy import inspect, text
 
-from app.extensions import db, mail, login_manager, limiter, migrate, csrf, socketio
+from app.extensions import db, mail, login_manager, limiter, migrate, csrf
 from app.services.skill_service import SkillService
 from app.models import HireRequest
-
 
 try:
     from app.admin import admin_bp
@@ -17,41 +16,21 @@ try:
 except ImportError:
     admin_bp = None
     HAS_ADMIN = False
-    logging.warning("Admin blueprint not available – export feature disabled.")
-
 
 def create_app(config_class=Config):
-
-    app = Flask(
-        __name__,
-        template_folder='../templates',
-        static_folder='../static'
-    )
-
+    app = Flask(__name__, template_folder='../templates', static_folder='../static')
     app.config.from_object(config_class)
-
-    # -----------------------------
-    # Extensions
-    # -----------------------------
 
     db.init_app(app)
     mail.init_app(app)
     login_manager.init_app(app)
-
     limiter.storage_uri = app.config.get('RATELIMIT_STORAGE_URI')
     limiter.init_app(app)
-
     migrate.init_app(app, db)
     csrf.init_app(app)
-
-    socketio.init_app(app)
-
     login_manager.login_view = 'auth.login'
 
-    # -----------------------------
-    # Upload folders (LOCAL ONLY)
-    # -----------------------------
-
+    # Create upload folders locally only
     try:
         if not os.environ.get("VERCEL"):
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -59,17 +38,8 @@ def create_app(config_class=Config):
     except Exception as e:
         app.logger.warning(f"Upload folder creation skipped: {e}")
 
-    # -----------------------------
-    # Import Models
-    # -----------------------------
-
     from app import models
-    from app.chat import models as chat_models
     from app.notifications import models as notif_models
-
-    # -----------------------------
-    # User Loader
-    # -----------------------------
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -77,10 +47,6 @@ def create_app(config_class=Config):
             return db.session.get(models.User, int(user_id))
         except Exception:
             return None
-
-    # -----------------------------
-    # Register Blueprints
-    # -----------------------------
 
     from app.auth.routes import auth_bp
     from app.main.routes import main_bp
@@ -95,19 +61,16 @@ def create_app(config_class=Config):
     if HAS_ADMIN and admin_bp:
         app.register_blueprint(admin_bp)
 
-    # -----------------------------
-    # Context Processors
-    # -----------------------------
-
     @app.context_processor
     def inject_unread_messages():
         from flask_login import current_user
         if current_user.is_authenticated:
             try:
-                from app.chat.service import ChatService
-                count = ChatService.get_unread_count(current_user.id)
+                from app.chat.service import get_unread_count
+                count = get_unread_count(current_user.id)
                 return dict(unread_messages_count=count)
-            except Exception:
+            except Exception as e:
+                app.logger.error(f"Unread count error: {e}")
                 return dict(unread_messages_count=0)
         return dict(unread_messages_count=0)
 
@@ -122,18 +85,9 @@ def create_app(config_class=Config):
                 return dict(pending_requests_count=0)
         return dict(pending_requests_count=0)
 
-    # -----------------------------
-    # Jinja Filters
-    # -----------------------------
-
     def skill_description_filter(skill):
         return SkillService.get_description(skill)
-
     app.jinja_env.filters['skill_description'] = skill_description_filter
-
-    # -----------------------------
-    # Error Handlers
-    # -----------------------------
 
     @app.errorhandler(404)
     def not_found_error(e):
@@ -153,27 +107,15 @@ def create_app(config_class=Config):
         flash("Security token expired. Please try again.", "danger")
         return redirect(request.referrer or url_for('main.landing'))
 
-    # -----------------------------
-    # DATABASE INIT (SAFE VERSION)
-    # -----------------------------
-
     with app.app_context():
-
-        # IMPORTANT:
-        # Only run create_all in LOCAL DEV
         if not os.environ.get("VERCEL"):
             db.create_all()
-
         try:
             inspector = inspect(db.engine)
             columns = [c['name'] for c in inspector.get_columns('user')]
-
             if 'is_admin' not in columns:
-                db.session.execute(
-                    text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE')
-                )
+                db.session.execute(text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE'))
                 db.session.commit()
-
         except Exception as e:
             app.logger.warning(f"Could not add is_admin column: {e}")
             db.session.rollback()

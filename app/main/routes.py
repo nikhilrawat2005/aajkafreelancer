@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, abort
 from flask_login import login_required, current_user
 import os
+import logging
 
 from app.models import User, HireRequest
 from app.user_service import UserService
@@ -8,7 +9,9 @@ from app.extensions import db
 from app.services.skill_service import SkillService
 from app.forms import EditProfileForm
 from app.data.services_data import ALL_SKILLS
+from app.supabase_client import sync_user_to_supabase
 
+logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
 
@@ -145,6 +148,7 @@ def edit_profile():
         current_user.is_worker = form.is_worker.data
         current_user.skills = form.skills.data
 
+        # Handle profile image upload
         if form.profile_image.data:
             old_image = current_user.profile_image
             try:
@@ -152,19 +156,29 @@ def edit_profile():
                 if filename:
                     current_user.profile_image = filename
                     db.session.commit()
+                    # Delete old image if not default
                     if old_image and old_image != 'default_profile.png':
                         old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], old_image)
                         if os.path.exists(old_path):
                             os.remove(old_path)
+                    # Sync updated profile image to Supabase
+                    sync_user_to_supabase(current_user)
                 else:
                     flash('Failed to upload image.', 'danger')
             except ValueError as e:
                 flash(str(e), 'danger')
+                db.session.rollback()
+                return redirect(url_for('main.edit_profile'))
             except Exception as e:
-                current_app.logger.error(f"Image upload error: {e}")
+                logger.error(f"Image upload error: {e}")
                 flash('An error occurred while uploading the image.', 'danger')
+                db.session.rollback()
+                return redirect(url_for('main.edit_profile'))
         else:
+            # No new image, just commit other changes
             db.session.commit()
+            # Sync other profile changes
+            sync_user_to_supabase(current_user)
 
         flash('Profile updated successfully.', 'success')
         return redirect(url_for('main.profile', username=current_user.username))
@@ -198,7 +212,6 @@ def skill_workers(skill_name):
     description = SkillService.get_description(actual_skill)
     counts = SkillService.get_skill_counts()
     worker_count = counts.get(actual_skill, 0)
-    # Pagination for skill workers
     page = request.args.get('page', 1, type=int)
     per_page = 20
     users_query = User.query.filter(
