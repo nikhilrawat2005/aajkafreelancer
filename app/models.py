@@ -33,13 +33,11 @@ class User(UserMixin, db.Model):
     sent_hire_requests = db.relationship(
         'HireRequest',
         foreign_keys='HireRequest.sender_id',
-        backref='sender',
         lazy='dynamic'
     )
     received_hire_requests = db.relationship(
         'HireRequest',
         foreign_keys='HireRequest.worker_id',
-        backref='worker',
         lazy='dynamic'
     )
 
