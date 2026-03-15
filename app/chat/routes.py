@@ -52,7 +52,7 @@ def start_conversation(user_id):
         flash('You cannot message yourself.', 'info')
         return redirect(url_for('main.profile', username=current_user.username))
 
-    target_user = User.query.get_or_404(user_id)
+    target_user = User.query.filter_by(id=user_id).first_or_404()
     supabase = get_supabase()
 
     # Find existing conversation
