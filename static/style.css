@@ -200,6 +200,13 @@ body::before {
   transform: translate(-2px, -2px) rotate(0.5deg);
 }
 
+/* Compact button utility for dense layouts (chat, headers) */
+.notebook-btn-sm {
+  padding: 0.45rem 1.2rem !important;
+  font-size: 1rem !important;
+  box-shadow: 4px 4px 0 black;
+}
+
 /* Solid primary button variant */
 .notebook-btn-solid {
   background: var(--btn-primary-bg) !important;

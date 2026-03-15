@@ -5,12 +5,15 @@
 {% block content %}
 <div class="row">
   <div class="col-12">
-    <h1 class="notebook-heading mb-4">Messages</h1>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h1 class="notebook-heading mb-0">Messages</h1>
+      <p class="mb-0 text-muted small">All your chats with students and workers in one place.</p>
+    </div>
   </div>
 </div>
 
 <div class="row">
-  <div class="col-md-8 mx-auto">
+  <div class="col-md-10 col-lg-8 mx-auto">
     <!-- Conversation list container (populated by JavaScript) -->
     <div id="conversation-list"></div>
   </div>

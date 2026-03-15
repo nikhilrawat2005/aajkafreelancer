@@ -5,18 +5,20 @@
 <div class="row">
     <div class="col-md-8 mx-auto">
         <div class="notebook-card p-4">
-            <div class="d-flex justify-content-between align-items-start">
-                <h1 class="notebook-heading">{{ profile_user.full_name }}</h1>
-                <div>
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div class="mb-2">
+                    <h1 class="notebook-heading mb-1">{{ profile_user.full_name }}</h1>
+                    <p class="text-muted mb-0">@{{ profile_user.username }}</p>
+                </div>
+                <div class="d-flex gap-2">
                     {% if current_user.is_authenticated and current_user.id != profile_user.id %}
-                        <a href="{{ url_for('chat.start_conversation', user_id=profile_user.id) }}" class="notebook-btn me-2">Message</a>
+                        <a href="{{ url_for('chat.start_conversation', user_id=profile_user.id) }}" class="notebook-btn">Message</a>
                     {% endif %}
                     {% if current_user.id == profile_user.id %}
                         <a href="{{ url_for('main.edit_profile') }}" class="notebook-btn">Edit Profile</a>
                     {% endif %}
                 </div>
             </div>
-            <p class="notebook-lead">@{{ profile_user.username }}</p>
             <hr class="notebook-divider">
             <div class="d-flex align-items-center mb-3">
                 <img src="{{ url_for('static', filename='uploads/profile_images/' + (profile_user.profile_image or 'default_profile.png')) }}"

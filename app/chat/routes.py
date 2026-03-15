@@ -141,7 +141,7 @@ def hire_status(conversation_id):
     if not hire:
         return jsonify({'status': None})
     return jsonify({
-        'status': hire.status if hire.active else None,
+        'status': hire.status,
         'request_id': hire.id,
         'work_title': hire.work_title,
         'work_description': hire.work_description,

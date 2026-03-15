@@ -106,6 +106,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const data = await res.json();
 
+      // If a completed work record exists, always show that state
+      if (data && data.record_created) {
+        setButtonState({
+          text: 'Work Recorded',
+          classesToAdd: ['hire-accepted'],
+          disabled: true
+        });
+        if (data.work_title) {
+          hireBtn.title = `Recorded work: ${data.work_title}`;
+        }
+        return;
+      }
+
       if (!data || !data.status) {
         setButtonState({
           text: 'Hire Worker',
