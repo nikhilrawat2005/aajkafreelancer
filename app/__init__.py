@@ -1,7 +1,4 @@
 import os
-import json
-import firebase_admin
-from firebase_admin import credentials
 
 from flask import Flask, render_template, flash, redirect, request, url_for
 from config import Config
@@ -10,11 +7,8 @@ from flask_wtf.csrf import CSRFError
 from sqlalchemy import inspect, text
 
 from app.extensions import db, mail, login_manager, limiter, migrate, csrf
-from app.services.skill_service import SkillService
-from app.models import HireRequest
 
 # ✅ ADMIN IMPORT
-
 try:
     from app.admin import admin_bp
     HAS_ADMIN = True
@@ -22,25 +16,14 @@ except ImportError:
     admin_bp = None
     HAS_ADMIN = False
 
-# ✅ FIREBASE INIT
-
-def init_firebase():
-    if not firebase_admin._apps:
-        firebase_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
-
-        if firebase_json:
-            cred_dict = json.loads(firebase_json)
-            cred = credentials.Certificate(cred_dict)
-            firebase_admin.initialize_app(cred)
-        else:
-            raise Exception("Firebase credentials missing")
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # 🔥 Firebase init
-    init_firebase()
+    # 🔥 Firebase: DO NOT call init_firebase() here.
+    # firebase_client.py handles singleton init via get_firebase_app().
+    # Calling it twice caused "Firebase app already exists" crash on Vercel.
 
     db.init_app(app)
     mail.init_app(app)
@@ -54,9 +37,11 @@ def create_app(config_class=Config):
 
     from app.auth.routes import auth_bp
     from app.main.routes import main_bp
+    from app.chat import chat_bp  # ✅ FIX: was never imported/registered
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
+    app.register_blueprint(chat_bp)  # ✅ FIX: chat routes 404'd on Vercel
 
     if HAS_ADMIN and admin_bp:
         app.register_blueprint(admin_bp)
@@ -77,9 +62,12 @@ def create_app(config_class=Config):
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash("Security token expired.", "danger")
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.landing'))
 
     with app.app_context():
+        # ✅ FIX: create tables if they don't exist (needed on Vercel first deploy)
+        db.create_all()
+
         try:
             inspector = inspect(db.engine)
             columns = [c['name'] for c in inspector.get_columns('user')]
@@ -90,5 +78,11 @@ def create_app(config_class=Config):
 
         except Exception:
             db.session.rollback()
+
+        # ✅ FIX: ensure upload folders exist on Vercel (/tmp/static/uploads/...)
+        for folder_key in ['UPLOAD_FOLDER', 'TEMP_UPLOAD_FOLDER']:
+            folder = app.config.get(folder_key)
+            if folder:
+                os.makedirs(folder, exist_ok=True)
 
     return app

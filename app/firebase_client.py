@@ -5,16 +5,16 @@ Replaces Supabase. Use Firebase Admin SDK for backend operations.
 import json
 import logging
 import os
-from flask import current_app, g
 import firebase_admin
 from firebase_admin import credentials, firestore, auth as firebase_auth
 
 logger = logging.getLogger(__name__)
 _firebase_initialized = False
+_firestore_client = None  # ✅ FIX: module-level client, not g-based (g fails outside request context on Vercel)
 
 
 def _get_credentials():
-    """Load Firebase credentials from file, env JSON, or GOOGLE_APPLICATION_CREDENTIALS."""
+    """Load Firebase credentials from env JSON, file path, or GOOGLE_APPLICATION_CREDENTIALS."""
     cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
     if cred_json:
         try:
@@ -22,11 +22,14 @@ def _get_credentials():
             return credentials.Certificate(data)
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Invalid FIREBASE_CREDENTIALS_JSON: {e}")
-    cred_path = (current_app.config.get("FIREBASE_CREDENTIALS_PATH") if current_app else None) or os.getenv("FIREBASE_CREDENTIALS_PATH")
+
+    cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
     if cred_path and os.path.isfile(cred_path):
         return credentials.Certificate(cred_path)
+
     if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
         return credentials.ApplicationDefault()
+
     raise RuntimeError(
         "Firebase credentials not configured. Set FIREBASE_CREDENTIALS_PATH, "
         "FIREBASE_CREDENTIALS_JSON, or GOOGLE_APPLICATION_CREDENTIALS."
@@ -34,25 +37,29 @@ def _get_credentials():
 
 
 def get_firebase_app():
-    """Get or create Firebase app (singleton)."""
+    """Get or create Firebase app (singleton). Safe to call multiple times."""
     global _firebase_initialized
     try:
         return firebase_admin.get_app()
     except ValueError:
         pass
-    if not _firebase_initialized:
-        cred = _get_credentials()
-        firebase_admin.initialize_app(cred)
-        _firebase_initialized = True
+    # Not initialized yet
+    cred = _get_credentials()
+    firebase_admin.initialize_app(cred)
+    _firebase_initialized = True
     return firebase_admin.get_app()
 
 
 def get_firestore():
-    """Returns Firestore client, cached per request."""
-    if "firestore_client" not in g:
+    """
+    Returns Firestore client (module-level singleton).
+    ✅ FIX: was using Flask's g object which crashes outside request context on Vercel.
+    """
+    global _firestore_client
+    if _firestore_client is None:
         get_firebase_app()
-        g.firestore_client = firestore.client()
-    return g.firestore_client
+        _firestore_client = firestore.client()
+    return _firestore_client
 
 
 def create_custom_token(uid: str):
@@ -95,7 +102,7 @@ def sync_user_to_firebase(user):
 
 
 # =========================================================
-# FIRESTORE HELPERS (chat - mirror Supabase table operations)
+# FIRESTORE HELPERS
 # =========================================================
 
 def _conversation_members():
@@ -141,7 +148,10 @@ def firestore_update_conversation(conv_id, last_message, last_message_time):
 
 def firestore_get_messages(conversation_id, limit=30, order_desc=True):
     """Get last N messages for a conversation."""
-    query = _messages(conversation_id).order_by("created_at", direction=firestore.Query.DESCENDING if order_desc else firestore.Query.ASCENDING).limit(limit)
+    query = _messages(conversation_id).order_by(
+        "created_at",
+        direction=firestore.Query.DESCENDING if order_desc else firestore.Query.ASCENDING
+    ).limit(limit)
     docs = list(query.stream())
     if order_desc:
         docs.reverse()
