@@ -3,7 +3,7 @@ import json
 import firebase_admin
 from firebase_admin import credentials
 
-from flask import Flask, app, render_template, flash, redirect, request, url_for
+from flask import Flask, render_template, flash, redirect, request, url_for
 from config import Config
 from werkzeug.exceptions import RequestEntityTooLarge
 from flask_wtf.csrf import CSRFError
@@ -28,13 +28,12 @@ def init_firebase():
     if not firebase_admin._apps:
         firebase_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
 
-
-    if firebase_json:
-        cred_dict = json.loads(firebase_json)
-        cred = credentials.Certificate(cred_dict)
-        firebase_admin.initialize_app(cred)
-    else:
-        raise Exception("Firebase credentials missing")
+        if firebase_json:
+            cred_dict = json.loads(firebase_json)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+        else:
+            raise Exception("Firebase credentials missing")
 
 def create_app(config_class=Config):
     app = Flask(__name__)
