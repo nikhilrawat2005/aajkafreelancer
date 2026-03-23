@@ -80,15 +80,8 @@ Chat with {{ other_user.full_name }}
 
 <!-- Pass data to JavaScript -->
 <script>
-
 window.CONVERSATION_ID = "{{ conversation.id }}";
-
-window.CURRENT_USER_ID = "{{ current_user.id }}";
-
-window.SUPABASE_URL = "{{ config.SUPABASE_URL }}";
-
-window.SUPABASE_ANON_KEY = "{{ config.SUPABASE_ANON_KEY }}";
-
+window.CURRENT_USER_ID = {{ current_user.id }};
 </script>
 
 {% endblock %}

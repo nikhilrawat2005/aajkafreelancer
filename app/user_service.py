@@ -1,11 +1,11 @@
 import random
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from PIL import Image
 from flask import current_app
 from app.extensions import db
-from app.models import User, PendingUser, EmailVerification
+from app.models import User
 
 
 class UserService:
@@ -18,20 +18,21 @@ class UserService:
             num = f'{random.randint(0, 9999):04d}'
             candidate = prefix + num
 
-            if not (
-                User.query.filter_by(assigned_id=candidate).first()
-                or PendingUser.query.filter_by(assigned_id=candidate).first()
-            ):
+            if not User.query.filter_by(assigned_id=candidate).first():
                 return candidate
 
         raise RuntimeError('Failed to generate unique assigned ID')
 
     @staticmethod
-    def create_pending_user(
-        username,
+    def get_user_by_firebase_uid(firebase_uid):
+        return User.query.filter_by(firebase_uid=firebase_uid).first()
+
+    @staticmethod
+    def create_user_from_google(
+        firebase_uid,
         email,
-        password,
         full_name,
+        username,
         college_name,
         year,
         class_name,
@@ -39,121 +40,41 @@ class UserService:
         phone_number,
         short_bio,
         is_worker,
-        commit=True
+        skills=None,
     ):
-
+        """Create a new user from Google Sign-In (no password)."""
         assigned_id = UserService.generate_assigned_id(username)
-        password_hash = generate_password_hash(password)
-
-        pending = PendingUser(
+        user = User(
+            firebase_uid=firebase_uid,
             username=username,
             email=email,
-            password_hash=password_hash,
+            password_hash=None,
             full_name=full_name,
             college_name=college_name,
             year=year,
             class_name=class_name,
             section=section,
             phone_number=phone_number,
-            short_bio=short_bio,
+            short_bio=short_bio or '',
+            skills=skills or '',
             is_worker=is_worker,
-            assigned_id=assigned_id
+            is_verified=True,
+            assigned_id=assigned_id,
+            profile_image='default_profile.png',
         )
-
-        db.session.add(pending)
-
-        if commit:
-            db.session.commit()
-
-        return pending
-
-    @staticmethod
-    def create_verification_code(pending_user_id, commit=True):
-
-        code = f'{random.randint(0, 999999):06d}'
-        expires_at = datetime.utcnow() + timedelta(minutes=10)
-
-        # delete old codes
-        EmailVerification.query.filter_by(
-            pending_user_id=pending_user_id
-        ).delete()
-
-        verification = EmailVerification(
-            pending_user_id=pending_user_id,
-            code=code,
-            expires_at=expires_at,
-            last_sent_at=datetime.utcnow()
-        )
-
-        db.session.add(verification)
-
-        if commit:
-            db.session.commit()
-
-        return code
-
-    @staticmethod
-    def verify_pending_user(pending_id, code):
-
-        pending = PendingUser.query.get(pending_id)
-
-        if not pending:
-            return None, 'Invalid session'
-
-        if datetime.utcnow() - pending.created_at > timedelta(minutes=15):
-
-            EmailVerification.query.filter_by(
-                pending_user_id=pending.id
-            ).delete()
-
-            db.session.delete(pending)
-            db.session.commit()
-
-            return None, 'Verification session expired. Please sign up again.'
-
-        verification = EmailVerification.query.filter_by(
-            pending_user_id=pending.id
-        ).order_by(EmailVerification.created_at.desc()).first()
-
-        if not verification or verification.is_expired():
-            return None, 'Verification code expired'
-
-        if verification.attempts >= 5:
-            return None, 'Too many attempts'
-
-        if verification.code != code:
-            verification.attempts += 1
-            db.session.commit()
-            return None, 'Invalid verification code'
-
-        if (
-            User.query.filter_by(email=pending.email).first()
-            or User.query.filter_by(username=pending.username).first()
-        ):
-            db.session.delete(verification)
-            pending.status = 'expired'
-            db.session.commit()
-            return None, 'User already exists'
-
-        user = pending.to_user()
-
         db.session.add(user)
-        db.session.delete(verification)
-        db.session.delete(pending)
-
         db.session.commit()
-
-        return user, 'Success'
+        return user
 
     @staticmethod
     def authenticate_user(login_input, password):
-
+        """Legacy - only for users with password (Google users have no password)."""
         user = User.query.filter(
             (User.email == login_input)
             | (User.username == login_input)
         ).first()
 
-        if user and check_password_hash(user.password_hash, password):
+        if user and user.password_hash and check_password_hash(user.password_hash, password):
             return user
 
         return None
@@ -197,7 +118,7 @@ class UserService:
 
     @staticmethod
     def change_password(user, new_password):
-
+        """Change password - only for users with password (Google users may not have one)."""
         user.password_hash = generate_password_hash(new_password)
         db.session.commit()
 
@@ -247,31 +168,3 @@ class UserService:
 
             if os.path.exists(path):
                 os.remove(path)
-
-    # ================= CLEANUP FIX =================
-
-    @staticmethod
-    def cleanup_expired_pending_users(minutes=15):
-
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
-
-        expired = PendingUser.query.filter(
-            PendingUser.created_at < cutoff
-        ).all()
-
-        deleted = 0
-
-        for p in expired:
-
-            # delete verification records first
-            EmailVerification.query.filter_by(
-                pending_user_id=p.id
-            ).delete()
-
-            db.session.delete(p)
-
-            deleted += 1
-
-        db.session.commit()
-
-        return deleted

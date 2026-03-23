@@ -89,6 +89,12 @@ def create_app(config_class=Config):
         return SkillService.get_description(skill)
     app.jinja_env.filters['skill_description'] = skill_description_filter
 
+    def profile_image_url(filename):
+        """URL for profile image - works with /tmp uploads on Vercel."""
+        return url_for('main.serve_profile_image', filename=(filename or 'default_profile.png'))
+
+    app.jinja_env.globals['profile_image_url'] = profile_image_url
+
     @app.errorhandler(404)
     def not_found_error(e):
         return render_template('error.html', error="Page not found"), 404
@@ -116,8 +122,11 @@ def create_app(config_class=Config):
             if 'is_admin' not in columns:
                 db.session.execute(text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE'))
                 db.session.commit()
+            if 'firebase_uid' not in columns:
+                db.session.execute(text('ALTER TABLE "user" ADD COLUMN firebase_uid VARCHAR(128)'))
+                db.session.commit()
         except Exception as e:
-            app.logger.warning(f"Could not add is_admin column: {e}")
+            app.logger.warning(f"Could not apply schema updates: {e}")
             db.session.rollback()
 
     return app

@@ -58,7 +58,7 @@
                 <div class="mb-3">
                     {{ form.profile_image.label(class="notebook-label") }}
                     <div class="mb-2">
-                        <img src="{{ url_for('static', filename='uploads/profile_images/' + (current_user.profile_image or 'default_profile.png')) }}"
+                        <img src="{{ profile_image_url(current_user.profile_image) }}"
                              class="rounded-circle" style="width: 100px; height: 100px; object-fit: cover;" id="profilePreview">
                     </div>
                     {{ form.profile_image(class="notebook-input form-control", accept="image/*") }}

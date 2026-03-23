@@ -1,434 +1,230 @@
-// static/js/chat.js – Supabase realtime chat (FINAL OPTIMIZED VERSION)
+// static/js/chat.js – Firebase Firestore realtime chat
 
 (function () {
 
-  // ---------------------------
-  // Initialize Supabase client
-  // ---------------------------
+  const db = firebase.firestore();
+  const auth = firebase.auth();
 
-  const { createClient } = supabase;
-  const supabaseClient = createClient(
-    window.SUPABASE_URL,
-    window.SUPABASE_ANON_KEY
-  );
-
-
-  // ---------------------------
-  // Utility: format timestamp
-  // ---------------------------
+  // Ensure user is signed in to Firebase (for Firestore access)
+  async function ensureFirebaseAuth() {
+    if (auth.currentUser) return true;
+    try {
+      const resp = await fetch('/auth/firebase-token', { credentials: 'same-origin' });
+      const data = await resp.json();
+      if (data.token) {
+        await auth.signInWithCustomToken(data.token);
+        return true;
+      }
+    } catch (e) {
+      console.error('Firebase auth failed:', e);
+    }
+    return false;
+  }
 
   function formatTime(timestamp) {
-    const date = new Date(timestamp);
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
-
   // =========================================================
-  // CHAT ROOM LOGIC
+  // CHAT ROOM
   // =========================================================
 
-  function initChatRoom() {
-
+  async function initChatRoom() {
     const container = document.getElementById("message-container");
     const form = document.getElementById("message-form");
     const input = document.getElementById("message-input");
-
     const conversationId = window.CONVERSATION_ID;
     const currentUserId = window.CURRENT_USER_ID;
 
     if (!container || !form || !conversationId) return;
 
-
-    // ----------------------------------
-    // Load last 30 messages
-    // ----------------------------------
-
-    async function loadInitialMessages() {
-
-      const { data, error } = await supabaseClient
-        .from("messages")
-        .select("*")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: false })
-        .limit(30);
-
-      if (error) {
-        console.error("Message load error:", error);
-        return;
-      }
-
-      data.reverse().forEach(renderMessage);
-
-      scrollToBottom();
-
-      // mark messages as seen
-      if (data.length) {
-
-        await supabaseClient
-          .from("messages")
-          .update({ seen: true })
-          .eq("conversation_id", conversationId)
-          .neq("sender_id", currentUserId)
-          .is("seen", false);
-
-      }
-
+    const ok = await ensureFirebaseAuth();
+    if (!ok) {
+      container.innerHTML = '<p class="text-danger">Unable to load chat. Please sign in again.</p>';
+      return;
     }
 
-
-    // ----------------------------------
-    // Render message bubble
-    // ----------------------------------
+    const messagesRef = db.collection("conversations").doc(conversationId).collection("messages");
+    const convRef = db.collection("conversations").doc(conversationId);
 
     function renderMessage(msg) {
-
       if (document.getElementById(`msg-${msg.id}`)) return;
-
       const wrapper = document.createElement("div");
-
       wrapper.id = `msg-${msg.id}`;
-
-      wrapper.className =
-        "mb-2 d-flex " +
-        (msg.sender_id === currentUserId
-          ? "justify-content-end"
-          : "justify-content-start");
-
+      wrapper.className = "mb-2 d-flex " + (msg.sender_id === currentUserId ? "justify-content-end" : "justify-content-start");
       wrapper.innerHTML = `
-        <div class="d-inline-block p-2 rounded"
-        style="
-        max-width:70%;
-        background-color:${
-          msg.sender_id === currentUserId
-            ? "var(--pastel-sky)"
-            : "var(--pastel-mint)"
-        };
-        border:2px solid black;
-        border-radius:20px 5px 20px 5px;
-        ">
-
-        ${msg.content}
-
-        <small class="text-muted d-block">
-        ${formatTime(msg.created_at)}
-        </small>
-
+        <div class="d-inline-block p-2 rounded" style="max-width:70%; background-color:${msg.sender_id === currentUserId ? "var(--pastel-sky)" : "var(--pastel-mint)"}; border:2px solid black; border-radius:20px 5px 20px 5px;">
+          ${msg.content}
+          <small class="text-muted d-block">${formatTime(msg.created_at)}</small>
         </div>
       `;
-
       container.appendChild(wrapper);
-
     }
-
 
     function scrollToBottom() {
       container.scrollTop = container.scrollHeight;
     }
 
+    // Load initial messages
+    const snapshot = await messagesRef.orderBy("created_at", "desc").limit(30).get();
+    const msgs = [];
+    snapshot.forEach(doc => msgs.push({ id: doc.id, ...doc.data() }));
+    msgs.reverse().forEach(renderMessage);
+    scrollToBottom();
 
-    // ----------------------------------
-    // Realtime subscription
-    // ----------------------------------
-
-    supabaseClient
-      .channel(`room-${conversationId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${String(conversationId)}`
-        },
-        (payload) => {
-
-          const newMsg = payload.new;
-
-          renderMessage(newMsg);
-
-          scrollToBottom();
-
-          // mark as seen
-          if (newMsg.sender_id !== currentUserId) {
-
-            supabaseClient
-              .from("messages")
-              .update({ seen: true })
-              .eq("id", newMsg.id);
-
-          }
-
+    // Mark messages as seen
+    if (msgs.length) {
+      const batch = db.batch();
+      msgs.forEach(m => {
+        if (m.sender_id !== currentUserId && !m.seen) {
+          batch.update(messagesRef.doc(m.id), { seen: true });
         }
-      )
-      .subscribe();
+      });
+      try { await batch.commit(); } catch (e) { console.warn(e); }
+    }
 
-
-    // ----------------------------------
-    // Send message
-    // ----------------------------------
-
-    form.addEventListener("submit", async (e) => {
-
-      e.preventDefault();
-
-      const text = input.value.trim();
-
-      if (!text) return;
-
-      const { error } = await supabaseClient
-        .from("messages")
-        .insert({
-          conversation_id: conversationId,
-          sender_id: currentUserId,
-          content: text,
-          message_type: "text",
-          seen: false
-        });
-
-      if (error) {
-
-        console.error("Send error:", error);
-        alert("Message failed");
-
-        return;
-
-      }
-
-      input.value = "";
-
-      // update conversation preview
-      await supabaseClient
-        .from("conversations")
-        .update({
-          last_message: text,
-          last_message_time: new Date().toISOString()
-        })
-        .eq("id", conversationId);
-
+    // Realtime listener
+    messagesRef.orderBy("created_at", "desc").limit(1).onSnapshot(snap => {
+      snap.docChanges().forEach(change => {
+        if (change.type === "added") {
+          const m = { id: change.doc.id, ...change.doc.data() };
+          if (!document.getElementById(`msg-${m.id}`)) {
+            renderMessage(m);
+            scrollToBottom();
+            if (m.sender_id !== currentUserId) {
+              messagesRef.doc(m.id).update({ seen: true });
+            }
+          }
+        }
+      });
     });
 
+    // Send message
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
 
-    loadInitialMessages();
+      const doc = {
+        conversation_id: conversationId,
+        sender_id: currentUserId,
+        content: text,
+        message_type: "text",
+        seen: false,
+        created_at: firebase.firestore.FieldValue.serverTimestamp()
+      };
 
+      try {
+        await messagesRef.add(doc);
+        await convRef.set({
+          last_message: text,
+          last_message_time: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        input.value = "";
+      } catch (err) {
+        console.error("Send error:", err);
+        alert("Message failed");
+      }
+    });
   }
-
-
 
   // =========================================================
   // CHAT LIST
   // =========================================================
 
   async function initChatList() {
-
     const container = document.getElementById("conversation-list");
     const currentUserId = window.CURRENT_USER_ID;
-
     if (!container) return;
 
-
-    // ----------------------------------
-    // Load conversation memberships
-    // ----------------------------------
-
-    const { data: memberships, error } = await supabaseClient
-      .from("conversation_members")
-      .select(`
-        conversation_id,
-        conversations (
-          id,
-          last_message,
-          last_message_time
-        )
-      `)
-      .eq("user_id", currentUserId);
-
-
-    if (error) {
-
-      console.error("Conversation load error:", error);
-
-      container.innerHTML =
-        '<p class="notebook-lead">Error loading conversations.</p>';
-
+    const ok = await ensureFirebaseAuth();
+    if (!ok) {
+      container.innerHTML = '<p class="notebook-lead">Unable to load conversations.</p>';
       return;
-
     }
 
+    const membersRef = db.collection("conversation_members");
+    const usersRef = db.collection("users");
+    const convsRef = db.collection("conversations");
 
-    if (!memberships.length) {
+    const myMembers = await membersRef.where("user_id", "==", currentUserId).get();
+    const convIds = [...new Set(myMembers.docs.map(d => d.data().conversation_id))];
 
-      container.innerHTML =
-        '<p class="notebook-lead">No conversations yet.</p>';
-
+    if (!convIds.length) {
+      container.innerHTML = '<p class="notebook-lead">No conversations yet.</p>';
       return;
-
     }
 
+    const conversations = [];
 
-    // ----------------------------------
-    // Fetch extra data
-    // ----------------------------------
-
-    const convPromises = memberships.map(async (m) => {
-
-      const convId = m.conversation_id;
-      const conv = m.conversations;
-
-      const { data: otherMember } = await supabaseClient
-        .from("conversation_members")
-        .select("user_id")
-        .eq("conversation_id", convId)
-        .neq("user_id", currentUserId)
-        .single();
-
+    for (const convId of convIds) {
+      const convSnap = await convsRef.doc(convId).get();
+      const convData = convSnap.exists ? convSnap.data() : {};
+      const members = await membersRef.where("conversation_id", "==", convId).get();
+      const other = members.docs.find(d => d.data().user_id !== currentUserId);
       let otherUser = null;
-
-      if (otherMember) {
-
-        const { data: user } = await supabaseClient
-          .from("users")
-          .select("id, full_name, username, profile_image")
-          .eq("id", otherMember.user_id)
-          .single();
-
-        otherUser = user;
-
+      if (other) {
+        const uid = other.data().user_id;
+        const uSnap = await usersRef.doc(String(uid)).get();
+        otherUser = uSnap.exists ? uSnap.data() : null;
       }
+      const msgsSnap = await db.collection("conversations").doc(convId).collection("messages")
+        .where("seen", "==", false)
+        .where("sender_id", "!=", currentUserId)
+        .get();
+      const unread = msgsSnap.size;
 
-      const { count } = await supabaseClient
-        .from("messages")
-        .select("*", { count: "exact", head: true })
-        .eq("conversation_id", convId)
-        .neq("sender_id", currentUserId)
-        .eq("seen", false);
-
-      return {
-
+      conversations.push({
         id: convId,
-        last_message: conv.last_message,
-        last_message_time: conv.last_message_time,
+        last_message: convData.last_message,
+        last_message_time: convData.last_message_time,
         other_user: otherUser,
-        unread_count: count || 0
+        unread_count: unread
+      });
+    }
 
-      };
-
+    conversations.sort((a, b) => {
+      const ta = a.last_message_time && (a.last_message_time.toDate ? a.last_message_time.toDate() : new Date(a.last_message_time));
+      const tb = b.last_message_time && (b.last_message_time.toDate ? b.last_message_time.toDate() : new Date(b.last_message_time));
+      return (tb || 0) - (ta || 0);
     });
-
-
-    const conversations = await Promise.all(convPromises);
-
-    conversations.sort(
-      (a, b) =>
-        new Date(b.last_message_time) - new Date(a.last_message_time)
-    );
-
-
-    // ----------------------------------
-    // Render chat list
-    // ----------------------------------
 
     container.innerHTML = "";
-
-    conversations.forEach((conv) => {
-
+    conversations.forEach(conv => {
       const card = document.createElement("div");
-
-      card.className = `notebook-card p-3 mb-3 ${
-        conv.unread_count > 0 ? "card-color-5" : ""
-      }`;
-
+      card.className = `notebook-card p-3 mb-3 ${conv.unread_count > 0 ? "card-color-5" : ""}`;
       card.innerHTML = `
         <div class="d-flex align-items-center">
-          <img
-            src="/static/uploads/profile_images/${
-              conv.other_user?.profile_image || "default_profile.png"
-            }"
-            class="rounded-circle me-2"
-            style="width:40px;height:40px;object-fit:cover"
-          >
-
+          <img src="/profile-images/${conv.other_user?.profile_image || "default_profile.png"}"
+            class="rounded-circle me-2" style="width:40px;height:40px;object-fit:cover">
           <div class="flex-grow-1">
-
             <h3 class="h5 mb-1">
-
-              <a href="/profile/${conv.other_user?.username}"
-                 class="notebook-link">
-
-                 ${conv.other_user?.full_name || "Unknown"}
-
-              </a>
-
-              ${
-                conv.unread_count > 0
-                  ? `<span class="badge bg-danger ms-2">${conv.unread_count} new</span>`
-                  : ""
-              }
-
+              <a href="/profile/${conv.other_user?.username || ""}" class="notebook-link">${conv.other_user?.full_name || "Unknown"}</a>
+              ${conv.unread_count > 0 ? `<span class="badge bg-danger ms-2">${conv.unread_count} new</span>` : ""}
             </h3>
-
-            <p class="mb-0 text-muted">
-              ${
-                conv.last_message
-                  ? conv.last_message.substring(0, 50)
-                  : "No messages yet"
-              }
-            </p>
-
+            <p class="mb-0 text-muted">${conv.last_message ? conv.last_message.substring(0, 50) : "No messages yet"}</p>
           </div>
-
-          <a href="/chat/${conv.id}" class="notebook-btn">
-            Open
-          </a>
-
+          <a href="/chat/${conv.id}" class="notebook-btn">Open</a>
         </div>
       `;
-
       container.appendChild(card);
-
     });
 
-
-    // ----------------------------------
-    // Realtime updates
-    // ----------------------------------
-
-    supabaseClient
-      .channel("chat-list-updates")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        (payload) => {
-
-          const newMsg = payload.new;
-
-          if (newMsg.sender_id === currentUserId) return;
-
-          initChatList();
-
-        }
-      )
-      .subscribe();
-
+    // Chat list is static - refresh on page reload. Navbar unread count updates via backend.
   }
-
-
 
   // =========================================================
   // PAGE ROUTER
   // =========================================================
 
   document.addEventListener("DOMContentLoaded", () => {
-
     if (document.getElementById("message-container")) {
-
       initChatRoom();
-
     } else if (document.getElementById("conversation-list")) {
-
       initChatList();
-
     }
-
   });
 
 })();

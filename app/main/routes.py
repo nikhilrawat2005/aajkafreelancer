@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, abort
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, abort, send_from_directory
 from flask_login import login_required, current_user
 import os
 import logging
@@ -9,10 +9,28 @@ from app.extensions import db
 from app.services.skill_service import SkillService
 from app.forms import EditProfileForm
 from app.data.services_data import ALL_SKILLS
-from app.supabase_client import sync_user_to_supabase
+from app.firebase_client import sync_user_to_firebase
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
+
+
+# =====================================================
+# PROFILE IMAGE SERVING (supports /tmp on Vercel)
+# =====================================================
+
+@main_bp.route('/profile-images/<filename>')
+def serve_profile_image(filename):
+    """Serve profile images from UPLOAD_FOLDER (or static fallback for default)."""
+    if '..' in filename:
+        abort(404)
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    static_profile = os.path.join(current_app.static_folder or '', 'uploads', 'profile_images')
+    for folder in [upload_folder, static_profile]:
+        path = os.path.join(folder, filename)
+        if os.path.isfile(path):
+            return send_from_directory(folder, filename)
+    return send_from_directory(static_profile, 'default_profile.png')
 
 
 # =====================================================
@@ -161,8 +179,8 @@ def edit_profile():
                         old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], old_image)
                         if os.path.exists(old_path):
                             os.remove(old_path)
-                    # Sync updated profile image to Supabase
-                    sync_user_to_supabase(current_user)
+                    # Sync updated profile image to Firebase
+                    sync_user_to_firebase(current_user)
                 else:
                     flash('Failed to upload image.', 'danger')
             except ValueError as e:
@@ -178,7 +196,7 @@ def edit_profile():
             # No new image, just commit other changes
             db.session.commit()
             # Sync other profile changes
-            sync_user_to_supabase(current_user)
+            sync_user_to_firebase(current_user)
 
         flash('Profile updated successfully.', 'success')
         return redirect(url_for('main.profile', username=current_user.username))

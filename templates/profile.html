@@ -21,7 +21,7 @@
             </div>
             <hr class="notebook-divider">
             <div class="d-flex align-items-center mb-3">
-                <img src="{{ url_for('static', filename='uploads/profile_images/' + (profile_user.profile_image or 'default_profile.png')) }}"
+                <img src="{{ profile_image_url(profile_user.profile_image) }}"
                      class="rounded-circle me-3" style="width: 80px; height: 80px; object-fit: cover; border: 3px solid black;">
                 <div>
                     <p><strong>College:</strong> {{ profile_user.college_name }}</p>

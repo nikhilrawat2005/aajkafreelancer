@@ -1,11 +1,13 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed, FileSize
 from wtforms import StringField, PasswordField, BooleanField, TextAreaField, SelectField
-from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError, Optional
+from wtforms.validators import DataRequired, EqualTo, Length, ValidationError, Optional
 from app.data.services_data import ALL_SKILLS
 
-class SignupForm(FlaskForm):
+class CompleteProfileForm(FlaskForm):
+    """Form for completing profile after Google Sign-In (no password, no email - from Google)."""
     full_name = StringField('Full Name', validators=[DataRequired(), Length(max=100)])
+    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
     college_name = SelectField('College', choices=[('ABES Engineering College', 'ABES Engineering College')],
                                validators=[DataRequired()])
     year = SelectField('Year', choices=[
@@ -23,17 +25,10 @@ class SignupForm(FlaskForm):
         ('CSE (DS)', 'CSE (DS)')
     ], validators=[DataRequired()])
     section = StringField('Section', validators=[DataRequired()])
-
-    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
-    email = StringField('Email', validators=[DataRequired(), Email()])
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
-    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
     phone_number = StringField('Phone Number', validators=[DataRequired(), Length(max=20)])
     short_bio = TextAreaField('Short Bio', validators=[Length(max=500)])
     is_worker = BooleanField('I want to offer my skills')
     skills = TextAreaField('Skills (comma separated)', validators=[Optional(), Length(max=500)])
-
-    # Profile image field removed – users can upload after login
 
     def validate_section(form, field):
         branch = form.class_name.data
@@ -47,15 +42,6 @@ class SignupForm(FlaskForm):
     def validate_skills(form, field):
         if form.is_worker.data and not field.data:
             raise ValidationError('Please list your skills.')
-
-
-class LoginForm(FlaskForm):
-    login_input = StringField('Username or Email', validators=[DataRequired()])
-    password = PasswordField('Password', validators=[DataRequired()])
-
-
-class VerifyForm(FlaskForm):
-    code = StringField('Verification Code', validators=[DataRequired(), Length(min=6, max=6)])
 
 
 class EditProfileForm(FlaskForm):

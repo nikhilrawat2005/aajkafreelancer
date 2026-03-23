@@ -135,7 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // On form submit, ensure skillsHidden is updated
-    const form = document.getElementById('signupForm') || document.getElementById('editProfileForm');
+    const form = document.getElementById('signupForm') || document.getElementById('editProfileForm') || document.getElementById('completeProfileForm');
     if (form) {
         form.addEventListener('submit', function(e) {
             updateSkillsHidden(); // final update before submit
@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`/auth/check-availability?field=${field}&value=${encodeURIComponent(value)}`)
             .then(res => res.json())
             .then(data => {
-                feedbackElement.textContent = data.message;
+                feedbackElement.textContent = data.available ? 'Available' : 'Already taken';
                 feedbackElement.style.color = data.available ? 'green' : 'red';
             })
             .catch(err => console.error('Availability check failed:', err));

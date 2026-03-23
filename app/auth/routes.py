@@ -1,64 +1,44 @@
-from flask import render_template, redirect, url_for, flash, session, request, Blueprint, current_app, jsonify
+"""
+Authentication routes - Google Sign-In + Complete Profile flow.
+No email verification. Two steps: 1) Google Sign-In, 2) Form filling (if new user).
+"""
+from flask import render_template, redirect, url_for, flash, session, request, Blueprint, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
-import os
-from datetime import datetime, timedelta
 import logging
 
 from app.extensions import db, limiter
-from app.models import PendingUser, User
-from app.forms import SignupForm, LoginForm, VerifyForm, ChangePasswordForm
-from app.user_service import UserService
-from app.email_service import EmailService
+from app.models import User
+from app.forms import CompleteProfileForm
 from app.data.services_data import SERVICES_DATA
-from app.supabase_client import sync_user_to_supabase
+from app.user_service import UserService
+from app.firebase_client import verify_firebase_token, sync_user_to_firebase, create_custom_token
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
 
 
 # =====================================================
-# USER CSV EXPORT
+# LEGACY REDIRECTS (old signup/verify flow removed)
 # =====================================================
 
-def append_user_to_csv(user):
-    import csv
-    os.makedirs('exports', exist_ok=True)
-    file_path = 'exports/users.csv'
-    file_exists = os.path.isfile(file_path)
-    with open(file_path, mode='a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow([
-                'username',
-                'email',
-                'full_name',
-                'college_name',
-                'year',
-                'class_name',
-                'section',
-                'phone_number',
-                'is_worker',
-                'skills',
-                'created_at'
-            ])
-        writer.writerow([
-            user.username,
-            user.email,
-            user.full_name,
-            user.college_name,
-            user.year,
-            user.class_name,
-            user.section,
-            user.phone_number,
-            user.is_worker,
-            user.skills or '',
-            user.created_at.strftime('%Y-%m-%d %H:%M:%S')
-        ])
+@auth_bp.route('/signup')
+def signup_redirect():
+    return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/verify/<int:pending_id>')
+def verify_redirect(pending_id):
+    return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/resend-code/<int:pending_id>')
+def resend_code_redirect(pending_id):
+    return redirect(url_for('auth.login'))
 
 
 # =====================================================
-# USERNAME / EMAIL AVAILABILITY
+# CHECK USERNAME AVAILABILITY (for complete profile)
 # =====================================================
 
 @auth_bp.route('/check-availability')
@@ -69,143 +49,146 @@ def check_availability():
     if field not in ["username", "email"] or not value:
         return jsonify({"available": False})
 
-    UserService.cleanup_expired_pending_users()
-
     user_exists = User.query.filter_by(**{field: value}).first()
     if user_exists:
-        return jsonify({"available": False})
-
-    pending = PendingUser.query.filter_by(**{field: value}).first()
-    if pending and (datetime.utcnow() - pending.created_at <= timedelta(minutes=15)):
         return jsonify({"available": False})
 
     return jsonify({"available": True})
 
 
 # =====================================================
-# SIGNUP
+# LOGIN (Google Sign-In button)
 # =====================================================
 
-@auth_bp.route('/signup', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
-def signup():
-    UserService.cleanup_expired_pending_users()
-    form = SignupForm()
+@auth_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page with Google Sign-In. No traditional form - Google only."""
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+
+    return render_template('login.html')
+
+
+# =====================================================
+# GOOGLE AUTH CALLBACK
+# =====================================================
+
+@auth_bp.route('/google/callback', methods=['POST'])
+@limiter.limit("10 per minute")
+def google_callback():
+    """
+    Receives Firebase ID token from Google Sign-In.
+    Verifies token, finds or creates user, redirects to complete-profile or dashboard.
+    """
+    data = request.get_json()
+    id_token = data.get('id_token') if data else None
+
+    if not id_token:
+        return jsonify({'error': 'Missing id_token'}), 400
+
+    decoded = verify_firebase_token(id_token)
+    if not decoded:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    firebase_uid = decoded.get('uid')
+    email = decoded.get('email')
+    name = decoded.get('name') or decoded.get('email', '').split('@')[0]
+
+    if not firebase_uid or not email:
+        return jsonify({'error': 'Invalid token data'}), 400
+
+    # Check if user already exists
+    user = UserService.get_user_by_firebase_uid(firebase_uid)
+    if user:
+        login_user(user)
+        return jsonify({
+            'success': True,
+            'redirect': url_for('main.dashboard'),
+        })
+
+    # New user - store in session, redirect to complete profile
+    session['google_signup'] = {
+        'firebase_uid': firebase_uid,
+        'email': email,
+        'name': name,
+    }
+    session.permanent = True
+
+    return jsonify({
+        'success': True,
+        'redirect': url_for('auth.complete_profile'),
+    })
+
+
+# =====================================================
+# COMPLETE PROFILE (Step 2 for new Google users)
+# =====================================================
+
+@auth_bp.route('/complete-profile', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
+def complete_profile():
+    """
+    Form for new users to fill after Google Sign-In.
+    Collects: username, full_name, college, year, branch, section, phone, bio, is_worker, skills.
+    """
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+
+    google_data = session.get('google_signup')
+    if not google_data:
+        flash('Please sign in with Google first.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    form = CompleteProfileForm()
     skill_categories = SERVICES_DATA
 
     if form.validate_on_submit():
         try:
-            existing_user = User.query.filter(
-                (User.email == form.email.data) |
-                (User.username == form.username.data)
-            ).first()
-            if existing_user:
-                flash("Username or email already registered.", "warning")
-                return redirect(url_for('auth.signup'))
+            # Check username availability
+            if User.query.filter_by(username=form.username.data).first():
+                flash('Username already taken. Please choose another.', 'danger')
+                return redirect(url_for('auth.complete_profile'))
 
-            existing_pending = PendingUser.query.filter(
-                (PendingUser.email == form.email.data) |
-                (PendingUser.username == form.username.data)
-            ).first()
-            if existing_pending:
-                flash("Email or username already waiting for verification.", "warning")
-                return redirect(url_for('auth.signup'))
+            if User.query.filter_by(email=google_data['email']).first():
+                flash('This email is already registered.', 'danger')
+                session.pop('google_signup', None)
+                return redirect(url_for('auth.login'))
 
-            pending = UserService.create_pending_user(
-                username=form.username.data,
-                email=form.email.data,
-                password=form.password.data,
+            user = UserService.create_user_from_google(
+                firebase_uid=google_data['firebase_uid'],
+                email=google_data['email'],
                 full_name=form.full_name.data,
+                username=form.username.data,
                 college_name=form.college_name.data,
                 year=form.year.data,
                 class_name=form.class_name.data,
                 section=form.section.data,
                 phone_number=form.phone_number.data,
-                short_bio=form.short_bio.data,
+                short_bio=form.short_bio.data or '',
                 is_worker=form.is_worker.data,
-                commit=False
+                skills=form.skills.data or '',
             )
-            db.session.flush()
-
-            code = UserService.create_verification_code(pending.id, commit=False)
-            db.session.commit()
-
-            try:
-                EmailService.send_verification_email(pending.email, pending.username, code)
-            except Exception as e:
-                logger.error(f"EMAIL FAILED: {e}")
-                flash("Account created but email failed. Try resend.", "warning")
-
-            session['pending_id'] = pending.id
-            session['pending_skills'] = form.skills.data or ''
-            flash("Verification code sent to your email.", "success")
-            return redirect(url_for('auth.verify', pending_id=pending.id))
+            session.pop('google_signup', None)
+            login_user(user)
+            sync_user_to_firebase(user)
+            flash('Profile created successfully! Welcome.', 'success')
+            return redirect(url_for('main.dashboard'))
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"SIGNUP ERROR: {e}")
-            flash("Registration failed.", "danger")
+            logger.error(f"Complete profile error: {e}")
+            flash('Registration failed. Please try again.', 'danger')
 
-    return render_template("signup.html", form=form, skill_categories=skill_categories)
+    # Pre-fill name from Google
+    if request.method == 'GET' and not form.full_name.data:
+        form.full_name.data = google_data.get('name', '')
 
-
-# =====================================================
-# VERIFY EMAIL
-# =====================================================
-
-@auth_bp.route('/verify/<int:pending_id>', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
-def verify(pending_id):
-    if session.get("pending_id") != pending_id:
-        flash("Invalid verification session.", "warning")
-        return redirect(url_for("auth.signup"))
-
-    form = VerifyForm()
-
-    if form.validate_on_submit():
-        user, message = UserService.verify_pending_user(pending_id, form.code.data)
-        if user:
-            user.profile_image = "default_profile.png"
-            if "pending_skills" in session:
-                user.skills = session.pop("pending_skills")
-            db.session.commit()
-
-            login_user(user)
-            append_user_to_csv(user)
-
-            # Sync user to Supabase for chat
-            sync_user_to_supabase(user)
-
-            try:
-                EmailService.send_welcome_email(user.email, user.username)
-            except Exception as e:
-                logger.error(f"WELCOME EMAIL FAILED: {e}")
-
-            session.pop("pending_id", None)
-            flash("Email verified successfully!", "success")
-            return redirect(url_for("main.dashboard"))
-        else:
-            flash(message, "danger")
-
-    return render_template("verify.html", form=form, pending_id=pending_id)
-
-
-# =====================================================
-# LOGIN
-# =====================================================
-
-@auth_bp.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
-def login():
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = UserService.authenticate_user(form.login_input.data, form.password.data)
-        if user:
-            login_user(user)
-            flash("Logged in successfully.", "success")
-            return redirect(url_for("main.dashboard"))
-        flash("Invalid credentials.", "danger")
-    return render_template("login.html", form=form)
+    return render_template(
+        'complete_profile.html',
+        form=form,
+        skill_categories=skill_categories,
+        google_email=google_data.get('email', ''),
+    )
 
 
 # =====================================================
@@ -216,47 +199,47 @@ def login():
 @login_required
 def logout():
     logout_user()
-    flash("Logged out.", "info")
-    return redirect(url_for("main.landing"))
+    session.pop('google_signup', None)
+    flash('Logged out.', 'info')
+    return redirect(url_for('main.landing'))
 
 
 # =====================================================
-# CHANGE PASSWORD
+# FIREBASE CUSTOM TOKEN (for chat Firestore access)
+# =====================================================
+
+@auth_bp.route('/firebase-token')
+@login_required
+def firebase_token():
+    """Returns a Firebase custom token for the current user to access Firestore from client."""
+    if not current_user.firebase_uid:
+        return jsonify({'error': 'User not linked to Firebase'}), 400
+    try:
+        token = create_custom_token(current_user.firebase_uid)
+        return jsonify({'token': token})
+    except Exception as e:
+        logger.error(f"Firebase custom token error: {e}")
+        return jsonify({'error': 'Failed to create token'}), 500
+
+
+# =====================================================
+# CHANGE PASSWORD (only for users with password)
 # =====================================================
 
 @auth_bp.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
+    from app.forms import ChangePasswordForm
+    if not current_user.password_hash:
+        flash('You signed in with Google. Password change is not available.', 'info')
+        return redirect(url_for('main.profile', username=current_user.username))
+
     form = ChangePasswordForm()
     if form.validate_on_submit():
         if not check_password_hash(current_user.password_hash, form.old_password.data):
-            flash("Incorrect password.", "danger")
-            return redirect(url_for("auth.change_password"))
+            flash('Incorrect password.', 'danger')
+            return redirect(url_for('auth.change_password'))
         UserService.change_password(current_user, form.new_password.data)
-        flash("Password changed.", "success")
-        return redirect(url_for("main.profile", username=current_user.username))
-    return render_template("change_password.html", form=form)
-
-
-# =====================================================
-# RESEND CODE
-# =====================================================
-
-@auth_bp.route('/resend-code/<int:pending_id>')
-@limiter.limit("3 per minute")
-def resend_code(pending_id):
-    pending = db.session.get(PendingUser, pending_id)
-    if not pending:
-        flash("Invalid request.", "warning")
-        return redirect(url_for("auth.signup"))
-
-    code = UserService.create_verification_code(pending_id, commit=True)
-    try:
-        EmailService.send_verification_email(pending.email, pending.username, code)
-    except Exception as e:
-        logger.error(f"RESEND EMAIL ERROR: {e}")
-        flash("Email failed to send.", "danger")
-        return redirect(url_for("auth.verify", pending_id=pending_id))
-
-    flash("Verification code resent.", "success")
-    return redirect(url_for("auth.verify", pending_id=pending_id))
+        flash('Password changed.', 'success')
+        return redirect(url_for('main.profile', username=current_user.username))
+    return render_template('change_password.html', form=form)

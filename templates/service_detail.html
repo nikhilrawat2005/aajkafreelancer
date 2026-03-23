@@ -15,7 +15,7 @@
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="notebook-card p-3 h-100 card-color-5">
                 <div class="d-flex align-items-center mb-2">
-                    <img src="{{ url_for('static', filename='uploads/profile_images/' + (user.profile_image or 'default_profile.png')) }}"
+                    <img src="{{ profile_image_url(user.profile_image) }}"
                          class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;">
                     <h3 class="notebook-heading h4 mb-0">{{ user.full_name }}</h3>
                 </div>

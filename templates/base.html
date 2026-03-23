@@ -162,7 +162,7 @@
                     {% endif %}
                     <!-- Profile Dropdown -->
                     <div class="dropdown">
-                        <img src="{{ url_for('static', filename='uploads/profile_images/' + (current_user.profile_image or 'default_profile.png')) }}"
+                        <img src="{{ profile_image_url(current_user.profile_image) }}"
                              class="profile-avatar dropdown-toggle"
                              id="profileDropdown"
                              data-bs-toggle="dropdown"
@@ -170,18 +170,19 @@
                              alt="Profile">
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
                             <li class="profile-dropdown-header">
-                                <img src="{{ url_for('static', filename='uploads/profile_images/' + (current_user.profile_image or 'default_profile.png')) }}" alt="">
+                                <img src="{{ profile_image_url(current_user.profile_image) }}" alt="">
                                 <span>{{ current_user.username }}</span>
                             </li>
                             <li><a class="dropdown-item" href="{{ url_for('main.profile', username=current_user.username) }}">View Profile</a></li>
                             <li><hr class="dropdown-divider"></li>
+                            {% if current_user.password_hash %}
                             <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">Change Password</a></li>
+                            {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">Logout</a></li>
                         </ul>
                     </div>
                 {% else %}
-                    <a href="{{ url_for('auth.login') }}" class="notebook-link">Login</a>
-                    <a href="{{ url_for('auth.signup') }}" class="notebook-link">Sign Up</a>
+                    <a href="{{ url_for('auth.login') }}" class="notebook-link">Sign In</a>
                 {% endif %}
             </div>
         </div>
@@ -241,12 +242,25 @@
     <script src="{{ url_for('static', filename='js/animation.js') }}"></script>
     <!-- Form enhancements JS -->
     <script src="{{ url_for('static', filename='js/forms.js') }}"></script>
-    <!-- Supabase JS client (required for realtime chat) -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Firebase JS SDK (Auth + Firestore for chat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     <!-- Global JS -->
     <script>
         window.CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        window.DEFAULT_PROFILE_IMAGE = "{{ url_for('static', filename='uploads/profile_images/default_profile.png') }}";
+        window.FIREBASE_CONFIG = {
+            apiKey: "{{ config.FIREBASE_API_KEY or '' }}",
+            authDomain: "{{ config.FIREBASE_AUTH_DOMAIN or '' }}",
+            projectId: "{{ config.FIREBASE_PROJECT_ID or '' }}",
+            storageBucket: "{{ config.FIREBASE_STORAGE_BUCKET or '' }}",
+            messagingSenderId: "{{ config.FIREBASE_MESSAGING_SENDER_ID or '' }}",
+            appId: "{{ config.FIREBASE_APP_ID or '' }}"
+        };
+        if (window.FIREBASE_CONFIG.apiKey) {
+            firebase.initializeApp(window.FIREBASE_CONFIG);
+        }
+        window.DEFAULT_PROFILE_IMAGE = "{{ profile_image_url('default_profile.png') }}";
 
         document.addEventListener('DOMContentLoaded', function() {
             // Flash message close buttons

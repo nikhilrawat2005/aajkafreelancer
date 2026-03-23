@@ -11,6 +11,8 @@ env/
 # Env files / secrets
 .env
 .env.*
+firebase-service-account.json
+*-firebase-adminsdk-*.json
 
 # Packaging
 *.egg-info/
