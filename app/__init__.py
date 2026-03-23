@@ -17,11 +17,11 @@ from app.models import HireRequest
 # ✅ FIXED ADMIN IMPORT
 
 try:
-from app.admin import admin_bp
-HAS_ADMIN = True
+    from app.admin import admin_bp
+    HAS_ADMIN = True
 except ImportError:
-admin_bp = None
-HAS_ADMIN = False
+    admin_bp = None
+    HAS_ADMIN = False
 
 # ✅ FIXED FIREBASE FUNCTION
 
@@ -29,7 +29,7 @@ def init_firebase():
 if not firebase_admin._apps:
 firebase_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
 
-```
+
     if firebase_json:
         cred_dict = json.loads(firebase_json)
         cred = credentials.Certificate(cred_dict)
