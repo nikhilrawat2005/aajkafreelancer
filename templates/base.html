@@ -6,7 +6,7 @@
     <!-- CSRF token for AJAX requests -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%93%92%3C/text%3E%3C/svg%3E">
     <title>Aaj Ka Freelancer - {% block title %}{% endblock %}</title>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -139,7 +139,7 @@
     <nav class="notebook-nav">
         <div class="container">
             <div class="nav-brand d-flex align-items-center">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" style="height: 40px; margin-right: 10px;">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" style="height: 40px; margin-right: 10px;" onerror="this.style.display='none';">
                 <a href="{{ url_for('main.landing') }}" class="notebook-link brand-title">Aaj Ka Freelancer</a>
             </div>
             <div class="nav-links">

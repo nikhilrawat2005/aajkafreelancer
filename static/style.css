@@ -50,6 +50,9 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   color: #1e1e1e;
+  background-image: radial-gradient(circle at 10% 10%, rgba(179, 217, 255, 0.25), transparent 40%),
+                    radial-gradient(circle at 90% 0%, rgba(217, 179, 255, 0.18), transparent 35%),
+                    radial-gradient(circle at 50% 100%, rgba(180, 231, 206, 0.22), transparent 45%);
 }
 
 /* Notebook grid background */
@@ -96,12 +99,16 @@ body::before {
 
 /* Navigation */
 .notebook-nav {
-  background: white;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
   border-bottom: 4px solid black;
   padding: 1rem 0;
   margin-bottom: 2rem;
   box-shadow: 0 6px 0 rgba(0, 0, 0, 0.1);
   transform: rotate(0.2deg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .notebook-nav .container {
@@ -160,6 +167,12 @@ body::before {
   transform: rotate(0deg) translateY(-4px);
 }
 
+.notebook-card,
+.feature-box,
+.stat-box {
+  will-change: transform, box-shadow;
+}
+
 /* Card color variants */
 .card-color-1 { background-color: var(--card-color-1) !important; }
 .card-color-2 { background-color: var(--card-color-2) !important; }
@@ -198,6 +211,12 @@ body::before {
   color: white !important;
   box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.3);
   transform: translate(-2px, -2px) rotate(0.5deg);
+}
+
+.notebook-btn:active,
+.notebook-btn-solid:active {
+  transform: translate(1px, 1px) rotate(0deg);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.25);
 }
 
 /* Compact button utility for dense layouts (chat, headers) */
@@ -446,6 +465,26 @@ body::before {
 .feature-box:hover {
   transform: translateY(-4px);
   box-shadow: 12px 12px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* Global reveal animation */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(24px) scale(0.99);
+  transition: opacity 500ms ease, transform 500ms ease;
+}
+
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Subtle glow around active interactive areas */
+.notebook-card:hover,
+.notebook-btn:hover,
+.icon-btn:hover,
+.skill-card:hover {
+  filter: saturate(1.03);
 }
 
 .feature-icon {
