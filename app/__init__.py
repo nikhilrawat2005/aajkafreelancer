@@ -15,8 +15,11 @@ from app.services.skill_service import SkillService
 from app.models import HireRequest
 
 try:
-from app.admin import admin_bp
-HAS_ADMIN = True
+    from app.admin import admin_bp
+    HAS_ADMIN = True
+except ImportError:
+    admin_bp = None
+    HAS_ADMIN = False
 except ImportError:
 admin_bp = None
 HAS_ADMIN = False
