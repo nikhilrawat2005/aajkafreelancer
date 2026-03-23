@@ -21,8 +21,8 @@ except ImportError:
     admin_bp = None
     HAS_ADMIN = False
 except ImportError:
-admin_bp = None
-HAS_ADMIN = False
+    admin_bp = None
+    HAS_ADMIN = False
 
 # 🔥 Firebase init function
 
