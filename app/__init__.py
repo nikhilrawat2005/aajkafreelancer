@@ -1,5 +1,4 @@
 import os
-
 from flask import Flask, render_template, flash, redirect, request, url_for
 from config import Config
 from werkzeug.exceptions import RequestEntityTooLarge
