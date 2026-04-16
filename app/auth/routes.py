@@ -4,12 +4,13 @@ No email verification. Two steps: 1) Google Sign-In, 2) Form filling (if new use
 """
 from flask import render_template, redirect, url_for, flash, session, request, Blueprint, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 import logging
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db, limiter
 from app.models import User
-from app.forms import CompleteProfileForm
+from app.forms import CompleteProfileForm, PasswordLoginForm
 from app.data.services_data import SERVICES_DATA
 from app.user_service import UserService
 from app.firebase_client import verify_firebase_token, sync_user_to_firebase, create_custom_token
@@ -62,11 +63,45 @@ def check_availability():
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page with Google Sign-In. No traditional form - Google only."""
+    """Login page with Google Sign-In + password login."""
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
 
-    return render_template('login.html')
+    form = PasswordLoginForm()
+    return render_template('login.html', form=form)
+
+
+# =====================================================
+# PASSWORD LOGIN
+# =====================================================
+
+@auth_bp.route('/login-password', methods=['POST'])
+@limiter.limit("10 per minute")
+def login_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+
+    form = PasswordLoginForm()
+    if not form.validate_on_submit():
+        flash("Please enter valid login details.", "danger")
+        return redirect(url_for('auth.login'))
+
+    user = User.query.filter(
+        (User.email == form.login_input.data) |
+        (User.username == form.login_input.data)
+    ).first()
+
+    if not user or not user.password_hash:
+        flash("Password login not available for this account. Use Google Sign-In.", "warning")
+        return redirect(url_for('auth.login'))
+
+    if not check_password_hash(user.password_hash, form.password.data):
+        flash("Invalid credentials.", "danger")
+        return redirect(url_for('auth.login'))
+
+    login_user(user)
+    flash("Logged in successfully.", "success")
+    return redirect(url_for('main.dashboard'))
 
 
 # =====================================================
@@ -97,14 +132,31 @@ def google_callback():
     if not firebase_uid or not email:
         return jsonify({'error': 'Invalid token data'}), 400
 
-    # Check if user already exists
+    # Lookup order:
+    # 1) firebase_uid
     user = UserService.get_user_by_firebase_uid(firebase_uid)
     if user:
         login_user(user)
-        return jsonify({
-            'success': True,
-            'redirect': url_for('main.dashboard'),
-        })
+        return jsonify({'success': True, 'redirect': url_for('main.dashboard')})
+
+    # 2) email (link firebase_uid if found)
+    user_by_email = User.query.filter_by(email=email).first()
+    if user_by_email:
+        # If this email belongs to another firebase_uid, handle conflict
+        if user_by_email.firebase_uid and user_by_email.firebase_uid != firebase_uid:
+            return jsonify({'error': 'This email is already linked to another Google account.'}), 409
+
+        user_by_email.firebase_uid = firebase_uid
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        login_user(user_by_email)
+        try:
+            sync_user_to_firebase(user_by_email)
+        except Exception:
+            pass
+        return jsonify({'success': True, 'redirect': url_for('main.dashboard')})
 
     # New user - store in session, redirect to complete profile
     session['google_signup'] = {
@@ -149,10 +201,23 @@ def complete_profile():
                 flash('Username already taken. Please choose another.', 'danger')
                 return redirect(url_for('auth.complete_profile'))
 
-            if User.query.filter_by(email=google_data['email']).first():
-                flash('This email is already registered.', 'danger')
+            existing_email_user = User.query.filter_by(email=google_data['email']).first()
+            if existing_email_user:
+                # Link and login instead of creating duplicate
+                if existing_email_user.firebase_uid and existing_email_user.firebase_uid != google_data['firebase_uid']:
+                    flash('This email is already linked to another Google account.', 'danger')
+                    session.pop('google_signup', None)
+                    return redirect(url_for('auth.login'))
+                existing_email_user.firebase_uid = google_data['firebase_uid']
+                db.session.commit()
+                login_user(existing_email_user)
                 session.pop('google_signup', None)
-                return redirect(url_for('auth.login'))
+                flash('Logged in successfully.', 'success')
+                return redirect(url_for('main.dashboard'))
+
+            password_hash = None
+            if form.password.data:
+                password_hash = generate_password_hash(form.password.data)
 
             user = UserService.create_user_from_google(
                 firebase_uid=google_data['firebase_uid'],
@@ -167,6 +232,7 @@ def complete_profile():
                 short_bio=form.short_bio.data or '',
                 is_worker=form.is_worker.data,
                 skills=form.skills.data or '',
+                password_hash=password_hash,
             )
             session.pop('google_signup', None)
             login_user(user)
@@ -174,6 +240,9 @@ def complete_profile():
             flash('Profile created successfully! Welcome.', 'success')
             return redirect(url_for('main.dashboard'))
 
+        except IntegrityError:
+            db.session.rollback()
+            flash('Username or email already exists.', 'danger')
         except Exception as e:
             db.session.rollback()
             logger.error(f"Complete profile error: {e}")

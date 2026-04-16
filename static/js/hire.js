@@ -45,22 +45,35 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function setupRecordClick(hire) {
-    hireBtn.onclick = async () => {
+    const modal = document.getElementById('hire-modal');
+    const form = document.getElementById('hire-record-form');
+    const cancelBtn = document.getElementById('hire-modal-cancel');
+    
+    if (!modal || !form || !cancelBtn) return;
+
+    hireBtn.onclick = () => {
+      modal.style.display = 'flex';
+      // Pre-fill existing data if any
+      document.getElementById('hire-title').value = hire.work_title || '';
+      document.getElementById('hire-desc').value = hire.work_description || '';
+    };
+
+    cancelBtn.onclick = () => {
+      modal.style.display = 'none';
+    };
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
       if (!hire || !hire.request_id) return;
 
-      const title = prompt('Work title (short name of the job):');
-      if (title === null) return;
+      const title = document.getElementById('hire-title').value.trim();
+      const description = document.getElementById('hire-desc').value.trim();
+      const startDate = document.getElementById('hire-start').value;
+      const endDate = document.getElementById('hire-end').value;
 
-      const description = prompt('Brief description of the work:');
-      if (description === null) return;
-
-      const startDate = prompt('Start date (YYYY-MM-DD) – optional:', '');
-      if (startDate === null) return;
-
-      const endDate = prompt('End date (YYYY-MM-DD) – optional:', '');
-      if (endDate === null) return;
-
-      hireBtn.disabled = true;
+      const submitBtn = document.getElementById('hire-modal-submit');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
 
       try {
         const res = await fetch(`/chat/hire/record/${hire.request_id}`, {
@@ -80,18 +93,22 @@ document.addEventListener('DOMContentLoaded', function () {
         const data = await res.json();
 
         if (data.success) {
+          modal.style.display = 'none';
           setButtonState({
             text: 'Work Recorded',
             classesToAdd: ['hire-accepted'],
             disabled: true
           });
+          // Optional: send a message in chat that work is recorded
         } else {
           alert(data.error || 'Could not save work record.');
-          hireBtn.disabled = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Work Details';
         }
       } catch (err) {
-        console.log(err);
-        hireBtn.disabled = false;
+        console.error(err);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Work Details';
       }
     };
   }

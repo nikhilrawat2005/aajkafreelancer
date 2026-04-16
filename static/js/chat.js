@@ -10,6 +10,7 @@
     if (auth.currentUser) return true;
     try {
       const resp = await fetch('/auth/firebase-token', { credentials: 'same-origin' });
+      if (!resp.ok) throw new Error('Token fetch failed');
       const data = await resp.json();
       if (data.token) {
         await auth.signInWithCustomToken(data.token);
@@ -53,11 +54,23 @@
       if (document.getElementById(`msg-${msg.id}`)) return;
       const wrapper = document.createElement("div");
       wrapper.id = `msg-${msg.id}`;
-      wrapper.className = "mb-2 d-flex " + (msg.sender_id === currentUserId ? "justify-content-end" : "justify-content-start");
+      const isMine = msg.sender_id === currentUserId;
+      wrapper.className = "mb-3 d-flex " + (isMine ? "justify-content-end" : "justify-content-start");
+      
+      const bgColor = isMine ? "var(--pastel-sky)" : "#f1f1f1";
+      const borderRadius = isMine ? "20px 20px 5px 20px" : "20px 20px 20px 5px";
+      const textAlign = isMine ? "text-end" : "text-start";
+      
       wrapper.innerHTML = `
-        <div class="d-inline-block p-2 rounded" style="max-width:70%; background-color:${msg.sender_id === currentUserId ? "var(--pastel-sky)" : "var(--pastel-mint)"}; border:2px solid black; border-radius:20px 5px 20px 5px;">
-          ${msg.content}
-          <small class="text-muted d-block">${formatTime(msg.created_at)}</small>
+        <div class="message-bubble position-relative d-inline-block p-3" 
+             style="max-width:85%; background-color:${bgColor}; border:2px solid black; border-radius:${borderRadius}; box-shadow: 4px 4px 0 rgba(0,0,0,0.1);">
+          <div class="message-content" style="font-size: 1.05rem; line-height: 1.4; color: #1e1e1e;">
+            ${msg.content}
+          </div>
+          <div class="d-flex align-items-center justify-content-end mt-1 gap-1" style="font-size: 0.75rem; opacity: 0.7;">
+            <span>${formatTime(msg.created_at)}</span>
+            ${isMine ? `<span class="seen-status">${msg.seen ? '✅' : '✔'}</span>` : ''}
+          </div>
         </div>
       `;
       container.appendChild(wrapper);
@@ -139,9 +152,12 @@
     const currentUserId = window.CURRENT_USER_ID;
     if (!container) return;
 
+    // Show loading state
+    container.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Loading your chats...</p></div>';
+
     const ok = await ensureFirebaseAuth();
     if (!ok) {
-      container.innerHTML = '<p class="notebook-lead">Unable to load conversations.</p>';
+      container.innerHTML = '<p class="notebook-lead text-danger">Unable to load conversations. Please refresh the page.</p>';
       return;
     }
 
@@ -149,50 +165,60 @@
     const usersRef = db.collection("users");
     const convsRef = db.collection("conversations");
 
-    const myMembers = await membersRef.where("user_id", "==", currentUserId).get();
-    const convIds = [...new Set(myMembers.docs.map(d => d.data().conversation_id))];
+    try {
+      const myMembers = await membersRef.where("user_id", "==", currentUserId).get();
+      const distinctConvIds = [...new Set(myMembers.docs.map(d => d.data().conversation_id))];
 
-    if (!convIds.length) {
-      container.innerHTML = '<p class="notebook-lead">No conversations yet.</p>';
-      return;
-    }
-
-    const conversations = [];
-
-    for (const convId of convIds) {
-      const convSnap = await convsRef.doc(convId).get();
-      const convData = convSnap.exists ? convSnap.data() : {};
-      const members = await membersRef.where("conversation_id", "==", convId).get();
-      const other = members.docs.find(d => d.data().user_id !== currentUserId);
-      let otherUser = null;
-      if (other) {
-        const uid = other.data().user_id;
-        const uSnap = await usersRef.doc(String(uid)).get();
-        otherUser = uSnap.exists ? uSnap.data() : null;
+      if (!distinctConvIds.length) {
+        container.innerHTML = '<div class="text-center p-5"><h3>No messages yet 📝</h3><p class="text-muted">Start a conversation from a worker\'s profile!</p></div>';
+        return;
       }
-      const msgsSnap = await db.collection("conversations").doc(convId).collection("messages")
-        .where("seen", "==", false)
-        .where("sender_id", "!=", currentUserId)
-        .get();
-      const unread = msgsSnap.size;
 
-      conversations.push({
-        id: convId,
-        last_message: convData.last_message,
-        last_message_time: convData.last_message_time,
-        other_user: otherUser,
-        unread_count: unread
+      // Parallelize fetching all conversation data
+      const conversations = await Promise.all(distinctConvIds.map(async (convId) => {
+        try {
+          const [convSnap, membersSnap, msgsSnap] = await Promise.all([
+            convsRef.doc(convId).get(),
+            membersRef.where("conversation_id", "==", convId).get(),
+            convsRef.doc(convId).collection("messages")
+              .where("seen", "==", false)
+              .where("sender_id", "!=", currentUserId)
+              .get()
+          ]);
+
+          const convData = convSnap.exists ? convSnap.data() : {};
+          const otherMemberDoc = membersSnap.docs.find(d => d.data().user_id !== currentUserId);
+          
+          let otherUser = null;
+          if (otherMemberDoc) {
+            const uid = otherMemberDoc.data().user_id;
+            const uSnap = await usersRef.doc(String(uid)).get();
+            otherUser = uSnap.exists ? uSnap.data() : null;
+          }
+
+          return {
+            id: convId,
+            last_message: convData.last_message || "No messages yet",
+            last_message_time: convData.last_message_time,
+            other_user: otherUser,
+            unread_count: msgsSnap.size
+          };
+        } catch (err) {
+          console.error(`Error loading conversation ${convId}:`, err);
+          return null;
+        }
+      }));
+
+      const validConvs = conversations.filter(c => c !== null);
+
+      validConvs.sort((a, b) => {
+        const ta = a.last_message_time && (a.last_message_time.toDate ? a.last_message_time.toDate() : new Date(a.last_message_time));
+        const tb = b.last_message_time && (b.last_message_time.toDate ? b.last_message_time.toDate() : new Date(b.last_message_time));
+        return (tb || 0) - (ta || 0);
       });
-    }
 
-    conversations.sort((a, b) => {
-      const ta = a.last_message_time && (a.last_message_time.toDate ? a.last_message_time.toDate() : new Date(a.last_message_time));
-      const tb = b.last_message_time && (b.last_message_time.toDate ? b.last_message_time.toDate() : new Date(b.last_message_time));
-      return (tb || 0) - (ta || 0);
-    });
-
-    container.innerHTML = "";
-    conversations.forEach(conv => {
+      container.innerHTML = "";
+      validConvs.forEach(conv => {
       const card = document.createElement("div");
       card.className = `notebook-card p-3 mb-3 ${conv.unread_count > 0 ? "card-color-5" : ""}`;
       card.innerHTML = `

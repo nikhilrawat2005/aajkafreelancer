@@ -14,6 +14,15 @@ from app.firebase_client import sync_user_to_firebase
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
+# -----------------------------------------------------
+# Favicon (avoid noisy 404s on Vercel logs)
+# -----------------------------------------------------
+
+@main_bp.route('/favicon.ico')
+@main_bp.route('/favicon.png')
+def favicon():
+    return ("", 204)
+
 
 # =====================================================
 # PROFILE IMAGE SERVING (supports /tmp on Vercel)

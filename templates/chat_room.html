@@ -38,6 +38,8 @@ Chat with {{ other_user.full_name }}
 
       <!-- MESSAGE AREA -->
       <div id="message-container"
+           data-conversation-id="{{ conversation.id }}"
+           data-current-user-id="{{ current_user.id }}"
            style="
            flex:1;
            overflow-y:auto;
@@ -77,11 +79,50 @@ Chat with {{ other_user.full_name }}
   </div>
 </div>
 
+<!-- Hire Details Modal -->
+<div id="hire-modal" class="modal-overlay" style="display:none;">
+    <div class="notebook-card modal-content p-4">
+        <h2 class="notebook-heading mb-3">Hire Details 📝</h2>
+        <p class="text-muted small mb-4">Set the job details. Once recorded, the hiring process is completed.</p>
+        
+        <form id="hire-record-form">
+            <div class="mb-3">
+                <label class="notebook-label">Work Title</label>
+                <input type="text" id="hire-title" class="notebook-input w-100" placeholder="e.g. Logo Design" required>
+            </div>
+            
+            <div class="mb-3">
+                <label class="notebook-label">Brief Description</label>
+                <textarea id="hire-desc" class="notebook-input w-100" rows="3" placeholder="Describe the job briefly..."></textarea>
+            </div>
+            
+            <div class="row">
+                <div class="col-6 mb-3">
+                    <label class="notebook-label">Start Date</label>
+                    <input type="date" id="hire-start" class="notebook-input w-100">
+                </div>
+                <div class="col-6 mb-3">
+                    <label class="notebook-label">End Date</label>
+                    <input type="date" id="hire-end" class="notebook-input w-100">
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <button type="button" class="notebook-btn-sm" id="hire-modal-cancel" style="border: 2px solid #ccc !important;">Cancel</button>
+                <button type="submit" class="notebook-btn-sm notebook-btn-solid" id="hire-modal-submit">Save Work Details</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 
 <!-- Pass data to JavaScript -->
 <script>
-window.CONVERSATION_ID = "{{ conversation.id }}";
-window.CURRENT_USER_ID = {{ current_user.id }};
+(function() {
+    const chatContainer = document.getElementById('message-container');
+    window.CONVERSATION_ID = chatContainer.dataset.conversationId;
+    window.CURRENT_USER_ID = parseInt(chatContainer.dataset.currentUserId);
+})();
 </script>
 
 {% endblock %}

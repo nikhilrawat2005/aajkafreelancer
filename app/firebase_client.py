@@ -43,22 +43,26 @@ def get_firebase_app():
         return firebase_admin.get_app()
     except ValueError:
         pass
-    # Not initialized yet
-    cred = _get_credentials()
-    firebase_admin.initialize_app(cred)
-    _firebase_initialized = True
-    return firebase_admin.get_app()
 
+    try:
+        cred = _get_credentials()
+        app = firebase_admin.initialize_app(cred)
+        _firebase_initialized = True
+        return app
+    except Exception as e:
+        logger.error(f"Critical Firebase initialization failure: {e}")
+        raise
 
 def get_firestore():
-    """
-    Returns Firestore client (module-level singleton).
-    ✅ FIX: was using Flask's g object which crashes outside request context on Vercel.
-    """
+    """Returns Firestore client (module-level singleton)."""
     global _firestore_client
     if _firestore_client is None:
-        get_firebase_app()
-        _firestore_client = firestore.client()
+        try:
+            get_firebase_app()
+            _firestore_client = firestore.client()
+        except Exception as e:
+            logger.error(f"Failed to initialize Firestore client: {e}")
+            raise
     return _firestore_client
 
 

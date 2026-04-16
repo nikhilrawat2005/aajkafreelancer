@@ -4,8 +4,13 @@ from wtforms import StringField, PasswordField, BooleanField, TextAreaField, Sel
 from wtforms.validators import DataRequired, EqualTo, Length, ValidationError, Optional
 from app.data.services_data import ALL_SKILLS
 
+class PasswordLoginForm(FlaskForm):
+    login_input = StringField('Email or Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+
+
 class CompleteProfileForm(FlaskForm):
-    """Form for completing profile after Google Sign-In (no password, no email - from Google)."""
+    """Form for completing profile after Google Sign-In (email from Google). Password is optional."""
     full_name = StringField('Full Name', validators=[DataRequired(), Length(max=100)])
     username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
     college_name = SelectField('College', choices=[('ABES Engineering College', 'ABES Engineering College')],
@@ -29,6 +34,8 @@ class CompleteProfileForm(FlaskForm):
     short_bio = TextAreaField('Short Bio', validators=[Length(max=500)])
     is_worker = BooleanField('I want to offer my skills')
     skills = TextAreaField('Skills (comma separated)', validators=[Optional(), Length(max=500)])
+    password = PasswordField('Set Password (optional)', validators=[Optional(), Length(min=6)])
+    confirm_password = PasswordField('Confirm Password', validators=[Optional(), EqualTo('password')])
 
     def validate_section(form, field):
         branch = form.class_name.data
@@ -42,6 +49,11 @@ class CompleteProfileForm(FlaskForm):
     def validate_skills(form, field):
         if form.is_worker.data and not field.data:
             raise ValidationError('Please list your skills.')
+
+    def validate_confirm_password(form, field):
+        # If password is set, confirmation becomes required
+        if form.password.data and not field.data:
+            raise ValidationError('Please confirm your password.')
 
 
 class EditProfileForm(FlaskForm):

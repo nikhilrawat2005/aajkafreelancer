@@ -3,23 +3,47 @@
 {% block title %}Login{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6 col-lg-5">
+    <div class="col-md-10 col-lg-8">
         <div class="notebook-card card p-4">
             <h2 class="text-center mb-4 notebook-heading">Sign In</h2>
-            <p class="text-center text-muted mb-4">Sign in with your Google account to continue</p>
+            <p class="text-center text-muted mb-4">Continue with Google or sign in with password.</p>
 
-            <!-- Google Sign-In Button -->
-            <div class="d-grid gap-2">
-                <button type="button" id="googleSignInBtn" class="btn d-flex align-items-center justify-content-center gap-2 p-3 rounded-3"
-                    style="background:#fff; border:2px solid #333; font-family:'Fredoka',sans-serif;">
-                    <i class="fab fa-google" style="font-size:1.25rem; color:#4285F4;"></i>
-                    <span>Continue with Google</span>
-                </button>
+            <div class="row g-4">
+              <div class="col-md-6">
+                <!-- Google Sign-In Button -->
+                <div class="d-grid gap-2">
+                    <button type="button" id="googleSignInBtn" class="btn d-flex align-items-center justify-content-center gap-2 p-3 rounded-3"
+                        style="background:#fff; border:2px solid #333; font-family:'Fredoka',sans-serif;">
+                        <i class="fab fa-google" style="font-size:1.25rem; color:#4285F4;"></i>
+                        <span>Continue with Google</span>
+                    </button>
+                </div>
+
+                <p class="text-center mt-4 mb-0 small text-muted">
+                    Google users can set password during profile setup.
+                </p>
+              </div>
+
+              <div class="col-md-6">
+                <form method="POST" action="{{ url_for('auth.login_password') }}">
+                  {{ form.hidden_tag() }}
+                  <div class="mb-3">
+                    {{ form.login_input.label(class="notebook-label") }}
+                    {{ form.login_input(class="notebook-input form-control", placeholder="Email or Username") }}
+                  </div>
+                  <div class="mb-3">
+                    {{ form.password.label(class="notebook-label") }}
+                    <div class="input-group">
+                      {{ form.password(class="notebook-input form-control", id="password") }}
+                      <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                        <i class="fas fa-eye"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <button type="submit" class="notebook-btn btn w-100">Sign In with Password</button>
+                </form>
+              </div>
             </div>
-
-            <p class="text-center mt-4 mb-0 small text-muted">
-                By signing in, you agree to use your college email.
-            </p>
         </div>
     </div>
 </div>

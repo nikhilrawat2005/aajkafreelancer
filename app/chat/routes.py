@@ -171,9 +171,17 @@ def record_hire(request_id):
     hire.work_title = data.get('title', '').strip()
     hire.work_description = data.get('description', '').strip()
     if data.get('start_date'):
-        hire.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        try:
+            hire.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            pass  # Or handle as error
+            
     if data.get('end_date'):
-        hire.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+        try:
+            hire.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            pass
+            
     hire.record_created = True
     hire.active = False
     db.session.commit()

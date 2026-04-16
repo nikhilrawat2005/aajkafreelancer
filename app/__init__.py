@@ -146,6 +146,14 @@ def create_app(config_class=Config):
             if "firebase_uid" not in columns:
                 db.session.execute(text('ALTER TABLE "user" ADD COLUMN firebase_uid VARCHAR(128)'))
                 db.session.commit()
+
+            # Hybrid auth: make password_hash nullable in Postgres if it isn't already
+            if db.engine.dialect.name == "postgresql":
+                try:
+                    db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password_hash DROP NOT NULL'))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
         except Exception as e:
             app.logger.warning(f"Could not apply schema updates: {e}")
             db.session.rollback()

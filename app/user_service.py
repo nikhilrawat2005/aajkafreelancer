@@ -6,6 +6,7 @@ from PIL import Image
 from flask import current_app
 from app.extensions import db
 from app.models import User
+from app.firebase_client import sync_user_to_firebase
 
 
 class UserService:
@@ -41,6 +42,7 @@ class UserService:
         short_bio,
         is_worker,
         skills=None,
+        password_hash=None,
     ):
         """Create a new user from Google Sign-In (no password)."""
         assigned_id = UserService.generate_assigned_id(username)
@@ -48,7 +50,7 @@ class UserService:
             firebase_uid=firebase_uid,
             username=username,
             email=email,
-            password_hash=None,
+            password_hash=password_hash,
             full_name=full_name,
             college_name=college_name,
             year=year,
@@ -115,6 +117,10 @@ class UserService:
             user.skills = data.get('skills')
 
         db.session.commit()
+        try:
+            sync_user_to_firebase(user)
+        except Exception:
+            pass
 
     @staticmethod
     def change_password(user, new_password):

@@ -145,13 +145,58 @@ FIREBASE_CREDENTIALS_PATH=firebase-service-account.json
 
 ```bash
 flask db upgrade
-# Or if no migrations yet:
-flask db init
-flask db migrate -m "Add firebase_uid, nullable password"
-flask db upgrade
 ```
 
 For SQLite (new project), tables are created automatically on first run.
+
+---
+
+## 🗄️ Database setup (PostgreSQL / Production)
+
+Because Vercel is serverless, you should apply DB schema changes **outside** the running app (one-time).
+
+### Option A (Recommended): Run the provided setup script
+
+This repo includes `scripts/db_setup.py` which:
+- creates missing tables (`db.create_all()`)
+- applies hybrid-auth fixes (password_hash nullable, firebase_uid column/index)
+
+Run it **from your machine** pointing to the production database:
+
+Windows (PowerShell):
+
+```powershell
+cd d:\Cipher\aajkafreelancer
+$env:DATABASE_URL="postgresql://USER:PASS@HOST:5432/DB"
+$env:SECRET_KEY="any-non-empty-value"
+$env:FIREBASE_PROJECT_ID="aaj-ka-freelancer"
+.\venv\Scripts\python scripts\db_setup.py
+```
+
+Linux/Mac:
+
+```bash
+export DATABASE_URL="postgresql://USER:PASS@HOST:5432/DB"
+export SECRET_KEY="any-non-empty-value"
+export FIREBASE_PROJECT_ID="aaj-ka-freelancer"
+python scripts/db_setup.py
+```
+
+### Option B: Manual SQL (quick fix for the current error)
+
+Run this directly on your Postgres DB:
+
+```sql
+ALTER TABLE "user"
+ALTER COLUMN password_hash DROP NOT NULL;
+
+ALTER TABLE "user"
+ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_firebase_uid ON "user"(firebase_uid);
+```
+
+If you already have a `firebase_uid` unique constraint/index, you can skip the last statement.
 
 ---
 
